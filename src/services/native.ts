@@ -7,7 +7,11 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 
 import type {
+  ActivitySnapshot,
+  ActivitySource,
+  ActivityUpdate,
   AppInfo,
+  ClaudeIntegration,
   IslandConnection,
   IslandLayouts,
   IslandSignal,
@@ -211,4 +215,62 @@ export function setRadioState(radio: RadioKind, on: boolean): Promise<void> {
 
 export function setDisplayBrightness(displayId: string, brightness: number): Promise<void> {
   return call<undefined>("set_display_brightness", { displayId, brightness });
+}
+
+/* ------------------------------------------------------------------------ */
+/* Activity                                                                  */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Registers the activity handler and returns the latest snapshot.
+ * Calling it again replaces the previous handler (Rust keeps one channel).
+ */
+export function connectActivity(
+  onUpdate: (update: ActivityUpdate) => void,
+): Promise<ActivitySnapshot> {
+  if (!isTauri()) {
+    return Promise.reject(
+      new NativeError(
+        "connect_activity",
+        "unavailable",
+        "not running inside the Islandy desktop shell",
+      ),
+    );
+  }
+  const channel = new Channel<ActivityUpdate>();
+  channel.onmessage = onUpdate;
+  return call<ActivitySnapshot>("connect_activity", { channel });
+}
+
+/** Dismisses an active event, or removes a finished one from history. */
+export function dismissActivity(id: string): Promise<void> {
+  return call<undefined>("dismiss_activity", { id });
+}
+
+export function clearActivityHistory(): Promise<void> {
+  return call<undefined>("clear_activity_history");
+}
+
+/** Islandy's own quiet mode (not Windows Do Not Disturb). */
+export function setQuietMode(quiet: boolean): Promise<void> {
+  return call<undefined>("set_quiet_mode", { quiet });
+}
+
+export function setActivitySource(source: ActivitySource, enabled: boolean): Promise<void> {
+  return call<undefined>("set_activity_source", { source, enabled });
+}
+
+/** Reads (never modifies) the user-level Claude Code settings. */
+export function getClaudeIntegration(): Promise<ClaudeIntegration> {
+  return call<ClaudeIntegration>("get_claude_integration");
+}
+
+/** Adds Islandy's hooks to `~/.claude/settings.json` (explicit user action). */
+export function installClaudeIntegration(): Promise<ClaudeIntegration> {
+  return call<ClaudeIntegration>("install_claude_integration");
+}
+
+/** Removes Islandy's hooks, and nothing else. */
+export function removeClaudeIntegration(): Promise<ClaudeIntegration> {
+  return call<ClaudeIntegration>("remove_claude_integration");
 }

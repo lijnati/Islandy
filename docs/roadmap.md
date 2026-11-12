@@ -103,15 +103,36 @@ and `IPolicyConfig` was rejected. Paired Bluetooth device lists were left out de
 **Dropped for now:** the downloads-folder activity heuristic (it would need file-system
 watching that Phase 3 did not otherwise require).
 
-## Phase 4: Developer workflow
+## Phase 4: Smart activity engine and Claude Code ✅ (Windows runtime verification pending)
 
-- Named-pipe event intake with an ACL and a reduced schema; a bundled `islandy-hook` helper.
-- Claude Code integration (opt-in setup that shows a diff of the settings change); agent status
-  peeks.
-- Local event API for user scripts.
+- Unified activity model (typed, no free-form metadata), deterministic Rust engine: P0–P3
+  priorities, source-specific deduplication, lifecycles and expiry, bounded history
+  (300 events / 7 days, `activity.json`).
+- Local receiver: loopback TCP with a per-installation token and a line protocol instead of
+  the named pipe planned earlier (trade-offs in claude-code-integration.md). Size and rate
+  limits, closed schema.
+- `islandy hook`: observational Claude Code bridge (always exits 0, prints nothing, forwards
+  only allow-listed fields). Opt-in, reversible installation into user settings with backup and
+  conflict detection.
+- Claude Code sessions tracked independently, conservative status mapping, stale-session
+  policy ("status unknown", never "done").
+- `islandy notify`: build/tests/dev-server/message events. `islandy status`.
+- Presentation coordinator (priority replacement, keyed queue, no interruptions), ambient pill
+  layout, activity center with filters, dismiss and clear, Claude Code view with a session
+  switcher, integrations panel, quiet mode.
+- System alerts now flow through the activity engine.
+
+**Verified on Linux with real Claude Code 2.1.322:** hook delivery, the working pill, the
+finished peek, the CLI. **Exit gate still open:** the Activity section of the Windows checklist
+in `README.md`.
+
+**Not done, by decision:** remote approval of permissions, sending keystrokes to terminals,
+"open terminal/project" (no verified target, and paths are not stored), terminal scraping,
+process monitoring.
 
 ## Phase 5: Polish and release
 
+- Quiet-mode scheduling; customizable peek durations.
 - Settings surface (minimal: shortcut, top offset), accessibility audit with a screen reader.
 - Single instance; start with Windows (opt-in).
 - Final identifier, icon, and branding; code signing; signed updater.

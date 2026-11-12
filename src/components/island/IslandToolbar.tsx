@@ -1,4 +1,6 @@
-import { ChevronLeft, ChevronUp, Pin, PinOff } from "lucide-react";
+import { ChevronLeft, ChevronUp, Moon, Pin, PinOff } from "lucide-react";
+
+import { activityStore, useActivity } from "../../features/activity/activity-store";
 
 import { dispatchIsland, useIsland, type WidgetId } from "../../features/island/island-store";
 import { formatShortDate, formatTime } from "../../features/island/format";
@@ -11,6 +13,8 @@ const WIDGET_TITLES: Record<WidgetId, string> = {
   media: "Now Playing",
   calendar: "Calendar",
   activity: "Activity",
+  claude: "Claude Code",
+  integrations: "Integrations",
   audio: "Sound",
   system: "System",
   network: "Network",
@@ -23,6 +27,9 @@ export function IslandToolbar() {
   const pinned = useIsland((s) => s.pinned);
   const activeWidget = useIsland((s) => s.activeWidget);
   const shortcut = useNativeStatus((s) => s.connection?.shortcut);
+  const quiet = useActivity((s) => s.snapshot?.settings.quiet ?? false);
+  const quietReady = useActivity((s) => s.connection === "connected");
+  const quietBusy = useActivity((s) => Boolean(s.pending.quiet));
   const shortcutHint = shortcut?.registered
     ? ` (${shortcut.accelerator.replace(/\+/g, " + ")})`
     : "";
@@ -59,6 +66,23 @@ export function IslandToolbar() {
       <div className="flex shrink-0 items-center gap-2">
         <QuickControls />
         <span aria-hidden="true" className="h-4 w-px bg-hairline" />
+        <IconButton
+          icon={Moon}
+          label={quiet ? "Turn off quiet mode" : "Turn on quiet mode"}
+          tooltip={
+            quietReady
+              ? quiet
+                ? "Quiet mode on: no automatic peeks"
+                : "Quiet mode: no automatic peeks"
+              : "Quiet mode (desktop app)"
+          }
+          pressed={quiet}
+          busy={quietBusy}
+          disabled={!quietReady}
+          onClick={() => {
+            activityStore.getState().setQuiet(!quiet);
+          }}
+        />
         <IconButton
           icon={pinned ? PinOff : Pin}
           label={pinned ? "Unpin dashboard" : "Pin dashboard open"}

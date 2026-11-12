@@ -17,12 +17,37 @@ export type IslandMode = "collapsed" | "peek" | "expanded" | "focused";
  * opened from the quick controls (same state machine, same geometry).
  */
 export type WidgetId =
-  "media" | "calendar" | "activity" | "audio" | "system" | "network" | "bluetooth" | "display";
+  | "media"
+  | "calendar"
+  | "activity"
+  | "claude"
+  | "integrations"
+  | "audio"
+  | "system"
+  | "network"
+  | "bluetooth"
+  | "display";
 
 export type PeekIcon =
-  "battery" | "batteryLow" | "plug" | "wifi" | "network" | "offline" | "speaker";
+  | "battery"
+  | "batteryLow"
+  | "plug"
+  | "wifi"
+  | "network"
+  | "offline"
+  | "speaker"
+  | "claude"
+  | "build"
+  | "tests"
+  | "server"
+  | "message";
 
-export type StatusTone = "neutral" | "working" | "success" | "attention";
+/**
+ * - `working`: amber (system/legacy "in progress")
+ * - `waiting`: amber, used for "needs your attention" (Claude Code requests)
+ * - `attention`: coral, problems (errors, low battery, offline)
+ */
+export type StatusTone = "neutral" | "working" | "waiting" | "success" | "attention";
 
 /** A contextual event shown in `peek` mode. */
 export interface PeekContent {
@@ -32,8 +57,10 @@ export interface PeekContent {
   tone: StatusTone;
   /** Media peeks show the track's artwork instead of the glyph. */
   artworkKey?: string | null;
-  /** System peeks show a matching icon. */
+  /** System and activity peeks show a matching icon. */
   icon?: PeekIcon;
+  /** How long this peek stays (default: the global peek dwell). */
+  dwellMs?: number;
 }
 
 export type IslandEvent =
@@ -201,7 +228,7 @@ export function desiredTimers(
       mode === "peek" && !hovering
         ? {
             key: `peek:${state.peekSeq}`,
-            ms: delays.peekMs,
+            ms: state.peek?.dwellMs ?? delays.peekMs,
             event: { type: "PEEK_TIMEOUT", seq: state.peekSeq },
           }
         : null,

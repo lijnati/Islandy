@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dismiss-activity"
+description = "Enables the dismiss_activity command without any pre-configured scope."
+commands.allow = ["dismiss_activity"]
+
+[[permission]]
+identifier = "deny-dismiss-activity"
+description = "Denies the dismiss_activity command without any pre-configured scope."
+commands.deny = ["dismiss_activity"]

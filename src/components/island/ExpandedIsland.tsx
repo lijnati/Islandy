@@ -8,7 +8,10 @@ import { BluetoothPanel } from "../system/BluetoothPanel";
 import { DisplayPanel } from "../system/DisplayPanel";
 import { NetworkPanel } from "../system/NetworkPanel";
 import { SystemPanel } from "../system/SystemPanel";
-import { ActivityDetail, ActivityWidget } from "../widgets/ActivityWidget";
+import { ActivityCenter } from "../activity/ActivityCenter";
+import { ActivityWidget } from "../activity/ActivityWidget";
+import { ClaudePanel } from "../activity/ClaudePanel";
+import { IntegrationsPanel } from "../activity/IntegrationsPanel";
 import { CalendarDetail, CalendarWidget } from "../widgets/CalendarWidget";
 import { MediaDetail, MediaWidget } from "../widgets/MediaWidget";
 import { IslandToolbar } from "./IslandToolbar";
@@ -16,7 +19,9 @@ import { IslandToolbar } from "./IslandToolbar";
 const DETAILS: Record<WidgetId, () => React.JSX.Element> = {
   media: MediaDetail,
   calendar: CalendarDetail,
-  activity: ActivityDetail,
+  activity: ActivityCenter,
+  claude: ClaudePanel,
+  integrations: IntegrationsPanel,
   // System panels, opened from the quick controls.
   audio: AudioPanel,
   system: SystemPanel,

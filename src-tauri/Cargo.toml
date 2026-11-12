@@ -21,9 +21,12 @@ tauri = { version = "2.12", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 tauri-plugin-global-shortcut = "2"
-
-[dev-dependencies]
-serde_json = "1"
+# Activity receiver/CLI wire format and the Claude Code settings editor.
+# `preserve_order` keeps the user's key order when Islandy edits
+# `~/.claude/settings.json` (both are already in Tauri's dependency tree).
+serde_json = { version = "1", features = ["preserve_order"] }
+# The per-installation receiver token (OS CSPRNG); already a Tauri dependency.
+getrandom = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [

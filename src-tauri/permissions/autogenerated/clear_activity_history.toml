@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-activity-history"
+description = "Enables the clear_activity_history command without any pre-configured scope."
+commands.allow = ["clear_activity_history"]
+
+[[permission]]
+identifier = "deny-clear-activity-history"
+description = "Denies the clear_activity_history command without any pre-configured scope."
+commands.deny = ["clear_activity_history"]

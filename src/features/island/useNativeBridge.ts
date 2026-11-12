@@ -7,13 +7,36 @@ import {
   setIslandInteractive,
 } from "../../services/native";
 import type { IslandSignal } from "../../services/types";
+import { peekForActivity } from "../activity/activity-model";
+import { activityStore } from "../activity/activity-store";
 import { DEMO_PEEK } from "../activity/demo-activity";
+import {
+  createPresentationCoordinator,
+  type PresentationCoordinator,
+} from "../activity/presentation";
 import { peekForChange } from "../media/media-model";
 import { mediaStore } from "../media/media-store";
-import { alertToPeek } from "../system/system-model";
 import { systemStore } from "../system/system-store";
 import type { SystemFocus } from "../../services/types";
 import { dispatchIsland, islandStore, type IslandState } from "./island-store";
+
+/**
+ * The app-wide presentation coordinator: every automatic peek (activity,
+ * system alerts via the activity engine, media) goes through it, so
+ * priorities, quiet mode and pacing apply to all of them.
+ */
+let coordinator: PresentationCoordinator | null = null;
+function presentation(): PresentationCoordinator {
+  coordinator ??= createPresentationCoordinator({
+    island: {
+      getState: () => islandStore.getState(),
+      subscribe: (listener) => islandStore.subscribe(listener),
+      dispatch: dispatchIsland,
+    },
+    quiet: () => activityStore.getState().snapshot?.settings.quiet ?? false,
+  });
+  return coordinator;
+}
 import { refreshLayouts } from "./layouts";
 import { nativeStatusStore } from "./native-status";
 
@@ -117,14 +140,14 @@ export function useNativeBridge(): void {
       if (next === previous || next === null) return;
       const peek = peekForChange(previous, next);
       previous = next;
-      if (peek) dispatchIsland({ type: "CONTEXT_EVENT", peek });
+      // Media is ambient: it never replaces a more important peek.
+      if (peek) presentation().offer({ key: "media", priority: 3, peek });
     });
   }, []);
 
   // System: connect once; tell Rust what is visible (sampling runs only
-  // while a panel needs it); turn de-duplicated alerts into peeks. The
-  // island state machine drops peeks while the dashboard is open, so they
-  // never interrupt the user.
+  // while a panel needs it). System alerts reach the island through the
+  // activity engine (history, priority, quiet mode), not from here.
   useEffect(() => {
     const system = systemStore.getState();
     system.start();
@@ -133,13 +156,34 @@ export function useNativeBridge(): void {
     };
     sync(islandStore.getState());
     const unsubscribeIsland = islandStore.subscribe(sync);
-    const unsubscribeAlerts = system.onAlert((alert) => {
-      dispatchIsland({ type: "CONTEXT_EVENT", peek: alertToPeek(alert) });
-    });
     return () => {
       unsubscribeIsland();
-      unsubscribeAlerts();
       systemStore.getState().setFocus("none");
+    };
+  }, []);
+
+  // Activity: connect once; peek requests from the engine go through the
+  // presentation coordinator, which never interrupts the dashboard.
+  useEffect(() => {
+    const activity = activityStore.getState();
+    activity.start();
+    const unsubscribe = activity.onPeek((request) => {
+      presentation().offer({
+        key: request.event.dedupeKey ?? request.event.id,
+        priority: request.event.priority,
+        peek: peekForActivity(request),
+      });
+    });
+    // Turning quiet mode on drops anything queued.
+    let quiet = activity.snapshot?.settings.quiet ?? false;
+    const unsubscribeQuiet = activityStore.subscribe((state) => {
+      const next = state.snapshot?.settings.quiet ?? false;
+      if (next && !quiet) presentation().clear();
+      quiet = next;
+    });
+    return () => {
+      unsubscribe();
+      unsubscribeQuiet();
     };
   }, []);
 }

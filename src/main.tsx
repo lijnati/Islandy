@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
+import { activityStore } from "./features/activity/activity-store";
 import { dispatchIsland, islandStore } from "./features/island/island-store";
 import { mediaStore } from "./features/media/media-store";
 import { systemStore } from "./features/system/system-store";
@@ -17,6 +18,7 @@ if (import.meta.env.DEV) {
       store: islandStore,
       media: mediaStore,
       system: systemStore,
+      activity: activityStore,
     },
   });
 }

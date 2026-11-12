@@ -28,9 +28,12 @@ pub enum Part {
 }
 
 type Sink = Box<dyn Fn(SystemUpdate) + Send>;
+type AlertObserver = Box<dyn Fn(&SystemAlert) + Send>;
 
 struct Inner {
     sink: Option<Sink>,
+    /// The activity engine (Phase 4): records alerts and decides on peeks.
+    observer: Option<AlertObserver>,
     snapshot: SystemSnapshot,
 }
 
@@ -40,6 +43,7 @@ impl Default for SystemHub {
     fn default() -> Self {
         Self(Mutex::new(Inner {
             sink: None,
+            observer: None,
             snapshot: SystemSnapshot::initial(),
         }))
     }
@@ -94,6 +98,11 @@ impl SystemHub {
         true
     }
 
+    /// Registers the alert observer (the activity engine).
+    pub fn observe_alerts(&self, observer: impl Fn(&SystemAlert) + Send + 'static) {
+        self.lock().observer = Some(Box::new(observer));
+    }
+
     /// Pushes a contextual alert. Alerts are not stored: a UI that connects
     /// later doesn't replay old alerts.
     pub fn alert(&self, alert: SystemAlert) {
@@ -102,6 +111,9 @@ impl SystemHub {
         let revision = inner.snapshot.revision;
         #[cfg(debug_assertions)]
         eprintln!("[islandy] system alert r{revision}: {alert:?}");
+        if let Some(observer) = inner.observer.as_ref() {
+            observer(&alert);
+        }
         if let Some(sink) = inner.sink.as_ref() {
             sink(SystemUpdate::Alert { revision, alert });
         }

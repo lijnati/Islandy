@@ -23,6 +23,15 @@ fn main() {
             "set_audio_muted",
             "set_radio_state",
             "set_display_brightness",
+            "connect_activity",
+            "get_activity_snapshot",
+            "dismiss_activity",
+            "clear_activity_history",
+            "set_quiet_mode",
+            "set_activity_source",
+            "get_claude_integration",
+            "install_claude_integration",
+            "remove_claude_integration",
         ]),
     ))
     .expect("failed to run tauri-build");

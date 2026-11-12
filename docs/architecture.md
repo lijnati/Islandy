@@ -10,19 +10,23 @@
 │                linux.rs (dev host: GTK sizing, X11 input shape)                │
 │  commands.rs   IPC surface ─► services/ (app_info, system_settings, media/)    │
 │  services/media/  GSMTC worker thread (MTA) ─► MediaHub ─► media Channel       │
+│  services/system/ audio/monitor/display workers ─► SystemHub ─► system Channel │
+│  services/activity/ receiver (127.0.0.1+token) + engine worker ─► activity Ch. │
+│  cli.rs        `islandy hook|notify|status` (runs instead of the app)          │
 │  signals.rs    Rust → UI push channel (toggle, focus lost, layouts changed)    │
 │  shortcut.rs   global toggle shortcut (tauri-plugin-global-shortcut)           │
 │  error.rs      IslandyError → { kind, message }                                │
 └───────────────┬─────────────────────────────────────────────────────────────────┘
-                │ Tauri IPC (invoke + two Channels), gated by capabilities/island.json
+                │ Tauri IPC (invoke + Channels), gated by capabilities/island.json
 ┌───────────────▼──────────── WebView2 (React) ───────────────────────────────────┐
 │  services/native.ts         ◄── the only caller of invoke()                    │
 │  features/island/           island-store (state machine + timers),             │
 │                             window-coordinator, layouts, native bridge         │
 │  features/media/            media-store (snapshots, commands) + media-model    │
-│  features/calendar|activity calendar math, demo activity                       │
+│  features/system|activity   system/activity stores, presentation coordinator   │
+│  features/calendar/         calendar math                                      │
 │  components/island/         IslandRoot, Collapsed/Peek/ExpandedIsland, toolbar │
-│  components/widgets/        Media, Calendar, Activity (+ detail views)         │
+│  components/widgets|system|activity  widgets, panels, activity center         │
 │  components/ui/             IconButton, Tooltip, WidgetSurface, StatusIndicator│
 │  styles/tokens.css          design tokens (Tailwind v4 @theme)                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -146,8 +150,8 @@ Details: [media.md](media.md).
 
 Native callbacks only post messages. Each worker re-reads its domain, and `SystemHub`
 pushes a `SystemUpdate` for that domain only, with a revision, if it changed. Alerts (low
-battery, power, network, audio output) are de-duplicated in Rust, again in the UI, and shown
-as peeks.
+battery, power, network, audio output) are de-duplicated in Rust and, since Phase 4, handed to
+the activity engine, which records them and decides on their peeks.
 
 The UI tells Rust what it shows (`set_system_focus`):
 
@@ -157,6 +161,37 @@ The UI tells Rust what it shows (`set_system_focus`):
 The panels are views of the existing `focused` mode (`WidgetId` includes `audio`, `system`,
 `network`, `bluetooth` and `display`), so they share the dashboard's geometry and
 transitions. Details: [system.md](system.md).
+
+## Activity
+
+`services/activity/` (Phase 4):
+
+- **receiver thread:** a loopback TCP listener that authenticates every message with a
+  per-installation token before parsing it, then validates a closed schema.
+- **activity worker:** owns `ActivityEngine`, a deterministic state machine with no I/O and an
+  explicit `now`.
+
+The worker turns reduced Claude Code hook events (from `islandy hook`), developer events (from
+`islandy notify`) and `SystemHub` alerts into Claude sessions, a bounded history and peek
+requests. It sleeps until the next message or the engine's next deadline. Snapshots are
+coalesced (120 ms) and pushed over `Channel<ActivityUpdate>`. History goes to `activity.json`
+(debounced, atomic).
+
+In the UI:
+
+- `activity-store` applies snapshots by revision.
+- The **presentation coordinator** (`features/activity/presentation.ts`) decides when a peek may
+  show: priority replacement, a small keyed queue, nothing while the dashboard is open, nothing
+  in quiet mode, a 450 ms gap between peeks. Media track peeks go through it too.
+- Peeks carry their own dwell time (`PeekContent.dwellMs`).
+- The collapsed pill uses a wider `ambient` layout (300 px) while activity is shown.
+- The Activity center, Claude Code view and Integrations panel are `focused` views (`activity`,
+  `claude`, `integrations`).
+
+The Claude Code settings editor (`claude_settings.rs`) runs only from two explicit commands.
+
+Details: [activity-engine.md](activity-engine.md) and
+[claude-code-integration.md](claude-code-integration.md).
 
 ## Focus and keyboard
 
@@ -216,15 +251,17 @@ out at its final size and clipped by the surface, so nothing reflows mid-animati
 cross-fade (out 90 ms, in 200 ms) and dashboard widgets enter with a 35 ms stagger.
 `prefers-reduced-motion` (read live) turns all of this into instant changes. While idle
 nothing animates; the collapsed activity bars animate (CSS `transform`) only while media is
-playing.
+playing, and the Claude Code glyph turns only while a session is working (never when it waits
+for attention, is idle or stale).
 
 ## Frontend conventions
 
 - Components do not call `invoke`; they call `services/native.ts`.
 - Timers are minute-aligned or event-driven, never per-frame or per-second while idle
-  (the demo media progress ticks once per second only while its widget is visible and playing).
-- Demo data lives in `features/activity/demo-activity.ts`, is labelled "Demo" in the UI, and
-  is replaced by a native store in Phase 4. Media is real since Phase 2.
+  (media progress ticks once per second only while visible and playing; a Claude turn's
+  elapsed time ticks once per second only while the Claude Code view shows a working session).
+- No widget shows demo data since Phase 4; only the tray's "Preview peek (demo)" uses a
+  static sample (`features/activity/demo-activity.ts`).
 - Native state lives in vanilla Zustand stores started once at the root (`useNativeBridge`);
   starting is idempotent so React Strict Mode cannot create duplicate subscriptions.
 - Visual values come from `styles/tokens.css`. The few values JavaScript needs are mirrored
@@ -232,6 +269,9 @@ playing.
 - The document, body and `#root` stay transparent. Only the island surface paints.
 
 ## Related documents
+
+- [activity-engine.md](activity-engine.md), [claude-code-integration.md](claude-code-integration.md),
+  [privacy.md](privacy.md): Phase 4.
 
 - [media.md](media.md): GSMTC integration, selection policy, events, artwork.
 - [system.md](system.md): audio, power, network, radios, metrics, brightness, settings.

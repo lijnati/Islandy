@@ -22,6 +22,15 @@
     "allow-set-master-volume",
     "allow-set-audio-muted",
     "allow-set-radio-state",
-    "allow-set-display-brightness"
+    "allow-set-display-brightness",
+    "allow-connect-activity",
+    "allow-get-activity-snapshot",
+    "allow-dismiss-activity",
+    "allow-clear-activity-history",
+    "allow-set-quiet-mode",
+    "allow-set-activity-source",
+    "allow-get-claude-integration",
+    "allow-install-claude-integration",
+    "allow-remove-claude-integration"
   ]
 }

@@ -23,6 +23,8 @@ pub enum IslandyError {
     #[error(transparent)]
     System(#[from] crate::services::system::SystemError),
     #[error(transparent)]
+    Integration(#[from] crate::services::activity::claude_settings::IntegrationError),
+    #[error(transparent)]
     Tauri(#[from] tauri::Error),
 }
 
@@ -36,6 +38,7 @@ impl IslandyError {
             Self::Platform(_) => "platform",
             Self::Media(e) => e.kind(),
             Self::System(e) => e.kind(),
+            Self::Integration(e) => e.kind(),
             Self::Tauri(_) => "internal",
         }
     }

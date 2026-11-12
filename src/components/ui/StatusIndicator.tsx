@@ -4,6 +4,7 @@ import { cx } from "./cx";
 const toneClass: Record<StatusTone, string> = {
   neutral: "bg-status-neutral",
   working: "bg-status-working",
+  waiting: "bg-status-waiting",
   success: "bg-status-success",
   attention: "bg-status-attention",
 };
@@ -11,6 +12,7 @@ const toneClass: Record<StatusTone, string> = {
 const toneText: Record<StatusTone, string> = {
   neutral: "text-fg-muted",
   working: "text-status-working",
+  waiting: "text-status-waiting",
   success: "text-status-success",
   attention: "text-status-attention",
 };

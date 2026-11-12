@@ -27,6 +27,7 @@
   /* Status — restrained, used only for small indicators. */
   --color-status-neutral: #909090;
   --color-status-working: #e8b44c;
+  --color-status-waiting: #f2b84b; /* needs the user (Claude Code requests) */
   --color-status-success: #5bd08a;
   --color-status-attention: #ff7a5c;
 
@@ -79,6 +80,14 @@
 
   /* Activity indicator bars */
   --animate-bar: island-bar 1.1s ease-in-out infinite;
+  /* Claude Code "working" glyph: a slow turn (transform only) */
+  --animate-glyph: island-glyph 3.2s linear infinite;
+
+  @keyframes island-glyph {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
   @keyframes island-bar {
     0%,
