@@ -1,0 +1,69 @@
+/*
+ * Islandy design tokens.
+ *
+ * Tailwind v4 reads `@theme` and generates utilities from these variables
+ * (e.g. `bg-surface`, `text-fg-muted`, `rounded-island`, `duration-base`).
+ * Keep this file the single source of truth for visual values; TypeScript
+ * only mirrors the few values that must be known in JS (see src/design/tokens.ts).
+ */
+@theme {
+  /* Reset Tailwind's default palette so only Islandy tokens exist. */
+  --color-*: initial;
+
+  /* Colors — premium dark minimalism. No saturated accents by default. */
+  --color-transparent: transparent;
+  --color-surface: #080808; /* island body */
+  --color-surface-raised: rgb(255 255 255 / 0.06); /* translucent secondary surface */
+  --color-surface-hover: rgb(255 255 255 / 0.1);
+  --color-fg: #f5f5f5; /* primary text */
+  --color-fg-muted: #909090; /* secondary text */
+  --color-fg-subtle: #5c5c5c; /* tertiary / disabled */
+  --color-hairline: rgb(255 255 255 / 0.08); /* island border */
+  --color-hairline-strong: rgb(255 255 255 / 0.14);
+  --color-signal: #34c759; /* reserved: live/active indicator, use sparingly */
+
+  /* Typography */
+  --font-sans:
+    "Geist Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  --text-caption: 11px;
+  --text-caption--line-height: 14px;
+  --text-body: 13px;
+  --text-body--line-height: 16px;
+  --text-title: 15px;
+  --text-title--line-height: 20px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --tracking-tight: -0.01em;
+
+  /* Radii — the collapsed island is a full pill. */
+  --radius-island: 9999px;
+  --radius-panel: 28px; /* expanded dashboard (Phase 1) */
+  --radius-tile: 18px; /* widgets inside the dashboard */
+  --radius-control: 10px;
+
+  /* Spacing — 4px grid. Tailwind's numeric scale derives from this. */
+  --spacing: 4px;
+
+  /* Shadows — only for expanded surfaces; the collapsed pill has none. */
+  --shadow-panel: 0 12px 32px rgb(0 0 0 / 0.35);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 220ms;
+  --duration-slow: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1.15);
+}
+
+/*
+ * Z-index conventions (kept as plain custom properties; Tailwind v4 uses
+ * arbitrary `z-(--z-overlay)` syntax to reference them).
+ */
+:root {
+  --z-base: 0;
+  --z-content: 10;
+  --z-overlay: 20;
+  --z-toast: 30;
+}
