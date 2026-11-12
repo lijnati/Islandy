@@ -8,17 +8,19 @@
 │  window/       geometry.rs (pure math) ─► manager.rs (IslandWindow, frame)     │
 │  platform/     windows.rs (Win32: styles, region, SetWindowPos, focus, Settings)│
 │                linux.rs (dev host: GTK sizing, X11 input shape)                │
-│  commands.rs   IPC surface ─► services/ (app_info, system_settings)            │
+│  commands.rs   IPC surface ─► services/ (app_info, system_settings, media/)    │
+│  services/media/  GSMTC worker thread (MTA) ─► MediaHub ─► media Channel       │
 │  signals.rs    Rust → UI push channel (toggle, focus lost, layouts changed)    │
 │  shortcut.rs   global toggle shortcut (tauri-plugin-global-shortcut)           │
 │  error.rs      IslandyError → { kind, message }                                │
 └───────────────┬─────────────────────────────────────────────────────────────────┘
-                │ Tauri IPC (invoke + one Channel), gated by capabilities/island.json
+                │ Tauri IPC (invoke + two Channels), gated by capabilities/island.json
 ┌───────────────▼──────────── WebView2 (React) ───────────────────────────────────┐
 │  services/native.ts         ◄── the only caller of invoke()                    │
 │  features/island/           island-store (state machine + timers),             │
 │                             window-coordinator, layouts, native bridge         │
-│  features/calendar|media|activity   calendar math, demo media, demo activity   │
+│  features/media/            media-store (snapshots, commands) + media-model    │
+│  features/calendar|activity calendar math, demo activity                       │
 │  components/island/         IslandRoot, Collapsed/Peek/ExpandedIsland, toolbar │
 │  components/widgets/        Media, Calendar, Activity (+ detail views)         │
 │  components/ui/             IconButton, Tooltip, WidgetSurface, StatusIndicator│
@@ -49,9 +51,11 @@ unknown`).
   (`app.rs`), list it in `build.rs` (app manifest), grant `allow-<name>` in
   `capabilities/island.json`, and wrap it in `native.ts`. Because of the app manifest,
   an ungranted command is denied rather than silently allowed.
-- Push data uses one Tauri `Channel` that the UI hands to Rust via `connect_island`, so the
-  UI needs no `core:event` permissions. Future push data (media, system stats) extends
-  `IslandSignal`; it is written into stores, never polled from components.
+- Push data uses Tauri `Channel`s that the UI hands to Rust, so the UI needs no `core:event`
+  permissions: `connect_island` (island signals) and `connect_media` (media snapshots; kept
+  separate so media state is independent of the island state machine). Pushed data is written
+  into stores, never polled from components.
+- Commands that wait on a worker (media) are `async`, so they never block the main thread.
 
 ## Window lifecycle
 
@@ -123,6 +127,15 @@ The drawing clip is omitted because a bounding shape stops WebKitGTK from painti
 Xvfb test host. Outside the island the canvas is transparent anyway (black without a
 compositor).
 
+## Media
+
+`services/media/` runs one worker thread in the multithreaded COM apartment that owns every
+GSMTC object. WinRT event handlers only post a message to it; it coalesces events (60 ms),
+re-reads what changed, applies the selection policy, and publishes a revisioned snapshot
+through `MediaHub` only when something meaningful changed. Commands are executed on the same
+worker with timeouts. The UI's `media-store` applies snapshots only if their revision is newer.
+Details: [media.md](media.md).
+
 ## Focus and keyboard
 
 - By default the window is non-activating (`WS_EX_NOACTIVATE`): hovering and clicking
@@ -180,22 +193,25 @@ collapse ≈ 240 ms without, peek ≈ 220 ms. Each view inside (pill, peek, dash
 out at its final size and clipped by the surface, so nothing reflows mid-animation; views
 cross-fade (out 90 ms, in 200 ms) and dashboard widgets enter with a 35 ms stagger.
 `prefers-reduced-motion` (read live) turns all of this into instant changes. While idle
-nothing animates; the collapsed activity bars animate (CSS `transform`) only while demo
-media is playing.
+nothing animates; the collapsed activity bars animate (CSS `transform`) only while media is
+playing.
 
 ## Frontend conventions
 
 - Components do not call `invoke`; they call `services/native.ts`.
 - Timers are minute-aligned or event-driven, never per-frame or per-second while idle
   (the demo media progress ticks once per second only while its widget is visible and playing).
-- Demo data lives in `features/media/demo-media.ts` and `features/activity/demo-activity.ts`,
-  is labelled "Demo" in the UI, and is replaced by native stores in Phases 2 and 4.
+- Demo data lives in `features/activity/demo-activity.ts`, is labelled "Demo" in the UI, and
+  is replaced by a native store in Phase 4. Media is real since Phase 2.
+- Native state lives in vanilla Zustand stores started once at the root (`useNativeBridge`);
+  starting is idempotent so React Strict Mode cannot create duplicate subscriptions.
 - Visual values come from `styles/tokens.css`. The few values JavaScript needs are mirrored
   in `design/tokens.ts`.
 - The document, body and `#root` stay transparent. Only the island surface paints.
 
 ## Related documents
 
+- [media.md](media.md): GSMTC integration, selection policy, events, artwork.
 - [security.md](security.md): capabilities, CSP, and local-integration rules.
 - [performance.md](performance.md): budgets and the benchmark plan.
 - [windows-integration.md](windows-integration.md): research for future native features.

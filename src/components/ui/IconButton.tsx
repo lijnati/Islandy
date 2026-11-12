@@ -11,6 +11,8 @@ interface IconButtonProps {
   icon: LucideIcon;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   disabled?: boolean;
+  /** An action is in flight: repeated presses are ignored by the caller. */
+  busy?: boolean;
   /** Toggle buttons expose their state to assistive technology. */
   pressed?: boolean;
   size?: "sm" | "md" | "lg";
@@ -34,6 +36,7 @@ export function IconButton({
   icon: Icon,
   onClick,
   disabled = false,
+  busy = false,
   pressed,
   size = "md",
   variant = "ghost",
@@ -48,15 +51,17 @@ export function IconButton({
         aria-label={label}
         aria-pressed={pressed}
         aria-disabled={disabled || undefined}
+        aria-busy={busy || undefined}
         onClick={disabled ? undefined : onClick}
         className={cx(
           "inline-flex shrink-0 items-center justify-center rounded-full transition-[background-color,color,transform] duration-fast ease-standard",
           s.box,
           focusRing,
           variant === "solid"
-            ? "bg-fg text-surface shadow-control hover:bg-white active:scale-95"
+            ? "bg-fg text-surface shadow-control hover:bg-accent active:scale-95"
             : "text-fg-muted hover:bg-surface-hover hover:text-fg active:scale-95",
           pressed && variant === "ghost" && "bg-surface-raised text-fg",
+          busy && "opacity-60",
           disabled &&
             "cursor-not-allowed text-fg-subtle hover:bg-transparent hover:text-fg-subtle active:scale-100",
         )}

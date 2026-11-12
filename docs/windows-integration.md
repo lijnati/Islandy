@@ -90,10 +90,14 @@ Detection approach (event-driven, no polling):
 
 ---
 
-## Media: Global System Media Transport Controls (GSMTC)
+## Media: Global System Media Transport Controls (GSMTC) (Phase 2: implemented, unverified on Windows)
 
-Namespace `Windows.Media.Control`; `windows` crate features `Media_Control`, `Foundation`,
-`Storage_Streams`. Callable from unpackaged desktop apps.
+Implemented in `src-tauri/src/services/media/`; full design in [media.md](media.md).
+Namespace `Windows.Media.Control`; `windows` 0.62 features `Media_Control`, `Foundation`,
+`Storage_Streams`, `Graphics_Imaging` (artwork transcoding), `ApplicationModel` (app names),
+`Win32_System_Com` (MTA worker); plus `windows-future` 0.3 to name the async types (they are
+awaited with `when` + `GetResults` and a timeout, not `join`). Callable from unpackaged
+desktop apps without any capability or elevation.
 
 | Need              | API                                                                                                                                                                           |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -112,9 +116,11 @@ Caveats:
 - Metadata quality depends on the source app. Browsers report per-tab media sessions;
   `SourceAppUserModelId` identifies the app.
 - Artwork can be absent or arrive after the title; render a placeholder and update.
-- WinRT event handlers fire on background threads. Forward them over a channel to a single
-  service task that debounces bursts (track changes often fire several events) and emits one
-  Tauri event.
+- WinRT event handlers fire on background threads. Islandy forwards them over a channel to a
+  single worker that coalesces bursts (track changes often fire several events) and pushes at
+  most one snapshot through a Tauri channel.
+- Session objects returned by `GetSessions()` are matched to stable ids by COM identity; the
+  AUMID is not a session id (one browser can own several sessions).
 
 ## Audio: Windows Core Audio
 

@@ -9,14 +9,19 @@ idle cost, fully local.
 
 ## Status
 
-**Phase 1: Dynamic island experience.** What exists today:
+**Phase 2: Native Windows media integration.** What exists today:
 
 - A black pill at the top center of the primary monitor (time, ambient glyph, media
   indicator) that expands with a spring animation into an ~820 × 248 dashboard on hover
   (150 ms intent delay), click, or **Ctrl + Alt + Space**.
 - Dashboard: toolbar (time, date, quick controls, pin, collapse) and three widgets:
-  **media** (demo data), **calendar** (real, locale-aware, with month navigation), and
-  **activity** (demo data). Each widget has a detail view.
+  **media** (real Windows media sessions), **calendar** (real, locale-aware, with month
+  navigation), and **activity** (demo data). Each widget has a detail view.
+- **Media (Phase 2):** any app that publishes a Windows media session (browsers, Spotify,
+  Media Player, …) is detected automatically through GSMTC. Title, artist, album and artwork;
+  play/pause, previous/next and seeking where the app supports them; a session switcher when
+  several apps play; the collapsed pill shows the artwork and a playback indicator, and a new
+  track shows a brief peek. See [docs/media.md](docs/media.md).
 - Interaction: hover-to-expand, delayed leave-collapse, click-to-pin, Escape, click outside
   (focus loss), peeks for contextual events (tray → _Preview peek (demo)_).
 - Native frame coordination: the window is a fixed canvas and a window region limits drawing
@@ -25,17 +30,19 @@ idle cost, fully local.
 - Quick controls open the Windows Settings page for Wi-Fi, Bluetooth, sound and display; they
   do not pretend to toggle anything. Islandy settings are marked "coming soon".
 
-**Demo data.** The media and activity widgets show local sample data, labelled _Demo_. They
-are not connected to Windows media sessions (Phase 2) or Claude Code (Phase 4).
+**Demo data.** The activity widget shows local sample data, labelled _Demo_; it is not
+connected to Claude Code yet (Phase 4).
 
-Not built yet: real media/audio, system widgets, settings, autostart, single instance,
+Not built yet: volume/audio devices, system widgets, settings, autostart, single instance,
 fullscreen handling. See [docs/roadmap.md](docs/roadmap.md).
 
 > **Verification note.** Islandy was developed on a Linux host. The Windows code paths compile
-> and pass `clippy` for `x86_64-pc-windows-msvc`, and a Windows installer cross-builds, but
+> and pass `clippy` for `x86_64-pc-windows-msvc`, and a Windows build and installer
+> cross-compile (Phase 2: with the MinGW toolchain, `--target x86_64-pc-windows-gnu`), but
 > Windows-native runtime behavior (WebView2 transparency and window regions, focus handling,
-> Alt+Tab, the global shortcut, Settings pages, DPI on real monitors) has **not** been verified
-> on a Windows machine. See the checklist below.
+> Alt+Tab, the global shortcut, Settings pages, DPI on real monitors, and **all GSMTC media
+> behavior with real players**) has **not** been verified on a Windows machine. See the
+> checklist below.
 
 ## Tech stack
 
@@ -118,12 +125,13 @@ The release binary is at `src-tauri/target/release/islandy.exe`, the installer u
 src/                      React frontend
   components/island/      IslandRoot (animated surface), Collapsed/Peek/ExpandedIsland,
                           IslandToolbar, QuickControls, ActivityBars, NowProvider
-  components/widgets/     Media, Calendar (+ MonthGrid), Activity (+ ActivityCard), details
+  components/widgets/     Media (+ SessionSwitcher, Artwork), Calendar (+ MonthGrid),
+                          Activity (+ ActivityCard), details
   components/ui/          IconButton, Tooltip, WidgetSurface, StatusIndicator
   features/island/        island-store (state machine + timers), window-coordinator,
                           layouts, useIslandFrame, useNativeBridge, native-status, format
   features/calendar/      calendar math (pure, tested)
-  features/media/         demo media store (Phase 2 replaces it)
+  features/media/         media store (native snapshots, commands, artwork) + pure model
   features/activity/      demo activity data (Phase 4 replaces it)
   hooks/                  useClock (minute-aligned), useNow, usePrefersReducedMotion
   services/               native.ts: the only module that calls Rust; types.ts: IPC types
@@ -135,10 +143,11 @@ src-tauri/                Rust backend
   src/commands.rs         IPC surface
   src/signals.rs          Rust → UI channel
   src/shortcut.rs         global toggle shortcut
-  src/services/           app_info.rs, system_settings.rs
+  src/services/           app_info.rs, system_settings.rs, media/ (GSMTC worker, see
+                          docs/media.md)
   src/error.rs            serializable error type
   capabilities/           least-privilege permissions
-docs/                     product, architecture, Windows integration, security,
+docs/                     product, architecture, media, Windows integration, security,
                           performance, roadmap
 ```
 
@@ -198,6 +207,27 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
       island collapses.
 - [ ] Opening a widget (click its title) shows the detail view; Back and Escape return.
 - [ ] Tray → **Preview peek (demo)** shows a peek that disappears after ~4 s.
+
+**Media (Phase 2)** — record app name and version for each; if an app lacks a capability
+(e.g. no seeking), note it as the app's limitation, not an Islandy failure.
+
+- [ ] Browser (Edge or Chrome) playing a YouTube video: detected within ~1 s; title, channel,
+      artwork; play/pause, next/previous (on a playlist), seeking.
+- [ ] A second player (Spotify, Media Player, VLC with SMTC enabled, …): same checks.
+- [ ] Pause and resume from the app: the pill's bars stop/start; the widget's button flips.
+- [ ] Pause/resume, next/previous from Islandy: the app reacts; Islandy's state changes only
+      after the app does.
+- [ ] Track change (auto-advance and skip): metadata and artwork update, a peek appears while
+      collapsed, no stale artwork.
+- [ ] Seeking by click/drag and arrow keys lands where expected; unsupported → no slider.
+- [ ] Two players at once: the switcher lists both; a manual choice sticks while the other
+      starts/stops; "Automatic" follows Windows' current session again.
+- [ ] Close the player while it plays: the session disappears; the island returns to idle (or
+      to the other session) without errors.
+- [ ] Quit Islandy while media plays: it exits promptly.
+- [ ] Unicode and very long titles render and truncate cleanly.
+- [ ] Idle CPU with music playing and the island collapsed stays near the idle budget
+      (see `docs/performance.md`).
 - [ ] With Windows _Animation effects_ turned off, transitions are instant.
 - [ ] The clock and calendar are correct and roll over at the minute and midnight, including
       after sleep/resume.
@@ -213,6 +243,8 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
   (click, widget, shortcut). Escape and click-outside therefore apply to the pinned state;
   an unpinned dashboard closes when the pointer leaves.
 - **Contextual events while the dashboard is open are dropped**, not queued.
+- **Media** shows only what each app publishes through Windows media sessions; see
+  [docs/media.md](docs/media.md) for media-specific limitations.
 - **12/24-hour format** follows the WebView language, not a custom Windows regional format.
 - **Display changes:** the island re-fits on the next interaction and on DPI changes; a
   resolution or taskbar change does not move the resting pill immediately.

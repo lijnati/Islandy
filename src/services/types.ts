@@ -20,7 +20,16 @@ export interface AppInfo {
 
 /** Error categories produced by the Rust side (`IslandyError`). */
 export type NativeErrorKind =
-  "window" | "monitor" | "invalid" | "unsupported" | "platform" | "internal";
+  | "window"
+  | "monitor"
+  | "invalid"
+  | "unsupported"
+  | "platform"
+  | "internal"
+  | "unavailable"
+  | "notFound"
+  | "rejected"
+  | "timeout";
 
 export interface NativeErrorPayload {
   kind: NativeErrorKind;
@@ -62,3 +71,65 @@ export type IslandSignal =
 
 /** Windows Settings pages the quick controls may open. Mirrors `SettingsPage`. */
 export type SettingsPage = "wifi" | "bluetooth" | "sound" | "display";
+
+/* ------------------------------------------------------------------------ */
+/* Media (mirrors `src-tauri/src/services/media/models.rs`)                   */
+/* ------------------------------------------------------------------------ */
+
+/** Mirrors `models::PlaybackStatus`. */
+export type PlaybackStatus = "playing" | "paused" | "stopped" | "changing" | "unknown";
+
+/** What the source app currently accepts. Mirrors `models::MediaControls`. */
+export interface MediaControls {
+  play: boolean;
+  pause: boolean;
+  togglePlayPause: boolean;
+  next: boolean;
+  previous: boolean;
+  /** Position changes accepted *and* a known duration. */
+  seek: boolean;
+}
+
+/** Position reported by the app at `updatedAtMs` (Unix ms). Mirrors `models::Timeline`. */
+export interface MediaTimeline {
+  positionMs: number;
+  durationMs: number | null;
+  updatedAtMs: number;
+}
+
+/** Mirrors `models::MediaSession` (metadata fields are flattened). */
+export interface MediaSession {
+  /** Stable for the session's lifetime, e.g. "s3". */
+  id: string;
+  sourceAppId: string;
+  sourceAppName: string;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  albumArtist: string | null;
+  trackNumber: number | null;
+  /** Content key; resolve with `getMediaArtwork`. */
+  artworkKey: string | null;
+  metadataLoaded: boolean;
+  playbackStatus: PlaybackStatus;
+  playbackRate: number;
+  controls: MediaControls;
+  timeline: MediaTimeline | null;
+  isSystemCurrent: boolean;
+}
+
+/** Mirrors `models::IntegrationStatus`. */
+export type MediaIntegrationStatus = "starting" | "ready" | "unavailable" | "unsupported";
+
+/** Mirrors `models::MediaSnapshot`. */
+export interface MediaSnapshot {
+  /** Strictly increasing; older snapshots must be ignored. */
+  revision: number;
+  status: MediaIntegrationStatus;
+  sessions: MediaSession[];
+  selectedSessionId: string | null;
+  selectionMode: "auto" | "user";
+}
+
+/** Mirrors `models::MediaAction`. */
+export type MediaAction = "play" | "pause" | "togglePlayPause" | "next" | "previous";

@@ -9,6 +9,12 @@
     "allow-get-island-layouts",
     "allow-set-island-frame",
     "allow-set-island-interactive",
-    "allow-open-system-settings"
+    "allow-open-system-settings",
+    "allow-connect-media",
+    "allow-get-media-snapshot",
+    "allow-select-media-session",
+    "allow-media-control",
+    "allow-media-seek",
+    "allow-get-media-artwork"
   ]
 }

@@ -22,6 +22,8 @@ export interface PeekContent {
   title: string;
   detail: string;
   tone: StatusTone;
+  /** Media peeks show the track's artwork instead of the glyph. */
+  artworkKey?: string | null;
 }
 
 export type IslandEvent =

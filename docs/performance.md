@@ -31,6 +31,14 @@ Islandy runs all day, so idle cost matters more than peak speed.
 - The state store updates subscribers only when a transition actually changes state.
 - Native integrations must be event-driven (GSMTC, Core Audio, PowerManager,
   NetworkInformation). CPU and memory sampling runs only while the system widget is visible.
+- **Media (Phase 2):** no polling. GSMTC events are coalesced (60 ms) into one re-read per
+  session and part; snapshots are published only when something changed, and timeline
+  updates that match the UI's interpolation (±1.5 s) are dropped. Artwork is decoded once per
+  distinct image, capped at 256 px / 256 KB, and sent only on demand by key (never inside
+  snapshots); the cache holds 12 entries. The worker thread sleeps in a blocking receive while
+  nothing happens. The progress display ticks once per second only while a media view is
+  visible and playing; the collapsed pill's bars are a CSS transform animation that runs only
+  while playing.
 - No background workers, and no plugins that spawn processes.
 - Release profile: LTO, `codegen-units = 1`, `opt-level = "s"`, `panic = "abort"`, stripped.
 
@@ -52,6 +60,12 @@ the size change / within 1 px): expand ≈ 310 ms / 560 ms (3 px overshoot), col
 was not measured (no GPU here).
 
 These numbers do **not** represent Windows.
+
+Phase 2 (debug build, Xvfb, Linux, media integration reports "unsupported" there): the app
+starts, connects the media channel and renders normally; RSS of the `islandy` process was
+about 160 MB in a **debug** build. This is not comparable with the release figures above and
+says nothing about GSMTC cost on Windows, which must be measured with real players
+(idle-collapsed with music playing is the important case).
 
 ## How to benchmark on Windows (to do before Phase 1 sign-off)
 

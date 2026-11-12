@@ -19,6 +19,8 @@ pub enum IslandyError {
     #[error("platform integration failed: {0}")]
     Platform(String),
     #[error(transparent)]
+    Media(#[from] crate::services::media::MediaError),
+    #[error(transparent)]
     Tauri(#[from] tauri::Error),
 }
 
@@ -30,6 +32,7 @@ impl IslandyError {
             Self::InvalidArgument(_) => "invalid",
             Self::Unsupported(_) => "unsupported",
             Self::Platform(_) => "platform",
+            Self::Media(e) => e.kind(),
             Self::Tauri(_) => "internal",
         }
     }
@@ -62,5 +65,10 @@ mod tests {
         );
         let json = serde_json::to_value(IslandyError::WindowNotFound("island")).unwrap();
         assert_eq!(json["kind"], "window");
+        let json = serde_json::to_value(IslandyError::from(
+            crate::services::media::MediaError::SessionNotFound,
+        ))
+        .unwrap();
+        assert_eq!(json["kind"], "notFound");
     }
 }

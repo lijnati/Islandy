@@ -10,7 +10,9 @@ use tauri::{
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::{
-    commands, shortcut,
+    commands,
+    services::media::MediaService,
+    shortcut,
     signals::{self, IslandSignal, SignalHub},
     window::{IslandWindow, WindowState},
 };
@@ -31,9 +33,17 @@ pub fn run() {
             commands::set_island_frame,
             commands::set_island_interactive,
             commands::open_system_settings,
+            commands::connect_media,
+            commands::get_media_snapshot,
+            commands::select_media_session,
+            commands::media_control,
+            commands::media_seek,
+            commands::get_media_artwork,
         ])
         .setup(|app| {
             setup_tray(app)?;
+            // Media runs on its own worker thread; starting it never blocks.
+            app.manage(MediaService::start()?);
             let status = shortcut::register(app.handle());
             app.manage(status);
             let island = IslandWindow::get(app.handle())?;
@@ -84,6 +94,10 @@ pub fn run() {
         if let RunEvent::Exit = event {
             // Release the system-wide hotkey promptly on quit.
             let _ = app.global_shortcut().unregister_all();
+            // Unregister WinRT media event handlers (bounded wait).
+            if let Some(media) = app.try_state::<MediaService>() {
+                media.shutdown();
+            }
         }
     });
 }

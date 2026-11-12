@@ -10,6 +10,12 @@ fn main() {
             "set_island_frame",
             "set_island_interactive",
             "open_system_settings",
+            "connect_media",
+            "get_media_snapshot",
+            "select_media_session",
+            "media_control",
+            "media_seek",
+            "get_media_artwork",
         ]),
     ))
     .expect("failed to run tauri-build");

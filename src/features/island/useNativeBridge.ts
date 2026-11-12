@@ -8,7 +8,8 @@ import {
 } from "../../services/native";
 import type { IslandSignal } from "../../services/types";
 import { DEMO_PEEK } from "../activity/demo-activity";
-import { demoMedia } from "../media/demo-media";
+import { peekForChange } from "../media/media-model";
+import { mediaStore } from "../media/media-store";
 import { dispatchIsland, islandStore } from "./island-store";
 import { refreshLayouts } from "./layouts";
 import { nativeStatusStore } from "./native-status";
@@ -93,20 +94,19 @@ export function useNativeBridge(): void {
     };
   }, []);
 
-  // Demo: a track that advances on its own is a contextual event.
-  useEffect(
-    () =>
-      demoMedia.onAutoAdvance((track) => {
-        dispatchIsland({
-          type: "CONTEXT_EVENT",
-          peek: {
-            source: "Now playing",
-            title: track.title,
-            detail: track.artist,
-            tone: "neutral",
-          },
-        });
-      }),
-    [],
-  );
+  // Media: connect once (idempotent, so Strict Mode's double effect is
+  // harmless) and peek briefly when a new track starts playing. Peeks never
+  // interrupt the dashboard (the state machine drops them there).
+  useEffect(() => {
+    const media = mediaStore.getState();
+    media.start();
+    let previous = media.snapshot;
+    return mediaStore.subscribe((state) => {
+      const next = state.snapshot;
+      if (next === previous || next === null) return;
+      const peek = peekForChange(previous, next);
+      previous = next;
+      if (peek) dispatchIsland({ type: "CONTEXT_EVENT", peek });
+    });
+  }, []);
 }
