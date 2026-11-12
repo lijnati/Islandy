@@ -11,6 +11,8 @@ import type {
   IslandConnection,
   IslandLayouts,
   IslandSignal,
+  MediaAction,
+  MediaSnapshot,
   NativeErrorKind,
   NativeErrorPayload,
   SettingsPage,
@@ -18,7 +20,7 @@ import type {
 } from "./types";
 
 export class NativeError extends Error {
-  readonly kind: NativeErrorKind | "unavailable" | "unknown";
+  readonly kind: NativeErrorKind | "unknown";
   readonly command: string;
 
   constructor(command: string, kind: NativeError["kind"], message: string) {
@@ -108,4 +110,52 @@ export function setIslandInteractive(interactive: boolean): Promise<void> {
 /** Opens a fixed Windows Settings page (Windows only). */
 export function openSystemSettings(page: SettingsPage): Promise<void> {
   return call<undefined>("open_system_settings", { page });
+}
+
+/* ------------------------------------------------------------------------ */
+/* Media                                                                     */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Registers the media snapshot handler and returns the current snapshot.
+ * Calling it again replaces the previous handler (Rust keeps one channel).
+ */
+export function connectMedia(
+  onSnapshot: (snapshot: MediaSnapshot) => void,
+): Promise<MediaSnapshot> {
+  if (!isTauri()) {
+    return Promise.reject(
+      new NativeError(
+        "connect_media",
+        "unavailable",
+        "not running inside the Islandy desktop shell",
+      ),
+    );
+  }
+  const channel = new Channel<MediaSnapshot>();
+  channel.onmessage = onSnapshot;
+  return call<MediaSnapshot>("connect_media", { channel });
+}
+
+export function getMediaSnapshot(): Promise<MediaSnapshot> {
+  return call<MediaSnapshot>("get_media_snapshot");
+}
+
+/** `null` returns to automatic session selection. */
+export function selectMediaSession(sessionId: string | null): Promise<MediaSnapshot> {
+  return call<MediaSnapshot>("select_media_session", { sessionId });
+}
+
+/** Sends a playback command; the confirmed effect arrives as a later snapshot. */
+export function mediaControl(sessionId: string, action: MediaAction): Promise<MediaSnapshot> {
+  return call<MediaSnapshot>("media_control", { sessionId, action });
+}
+
+export function mediaSeek(sessionId: string, positionMs: number): Promise<MediaSnapshot> {
+  return call<MediaSnapshot>("media_seek", { sessionId, positionMs });
+}
+
+/** A `data:image/jpeg` URL for an artwork key, or `null` if no longer cached. */
+export function getMediaArtwork(key: string): Promise<string | null> {
+  return call<string | null>("get_media_artwork", { key });
 }

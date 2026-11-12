@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-connect-media"
+description = "Enables the connect_media command without any pre-configured scope."
+commands.allow = ["connect_media"]
+
+[[permission]]
+identifier = "deny-connect-media"
+description = "Denies the connect_media command without any pre-configured scope."
+commands.deny = ["connect_media"]

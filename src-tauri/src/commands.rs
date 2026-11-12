@@ -6,12 +6,17 @@
 //! pages are an enum. No command accepts paths, URLs or command lines.
 
 use serde::Serialize;
-use tauri::{ipc::Channel, AppHandle, Manager, Runtime};
+use tauri::{ipc::Channel, AppHandle, Manager, Runtime, State};
 
 use crate::{
     error::{IslandyError, Result},
     services::{
         app_info::{self, AppInfo},
+        media::{
+            models::{MediaAction, MediaSnapshot, SessionId},
+            worker::Request,
+            MediaService,
+        },
         system_settings::{self, SettingsPage},
     },
     shortcut::ShortcutStatus,
@@ -83,4 +88,77 @@ pub fn set_island_interactive<R: Runtime>(app: AppHandle<R>, interactive: bool) 
 #[tauri::command]
 pub fn open_system_settings(page: SettingsPage) -> Result<()> {
     system_settings::open(page)
+}
+
+/* -------------------------------------------------------------------------- */
+/* Media (GSMTC). Commands that reach the media worker are async, so they     */
+/* never block the main thread; the worker applies native timeouts.           */
+/* -------------------------------------------------------------------------- */
+
+fn session_id(value: &str) -> Result<SessionId> {
+    SessionId::parse(value).ok_or(IslandyError::InvalidArgument("unknown media session id"))
+}
+
+/// Registers the media channel and returns the current snapshot atomically.
+#[tauri::command]
+pub fn connect_media(
+    media: State<'_, MediaService>,
+    channel: Channel<MediaSnapshot>,
+) -> MediaSnapshot {
+    media.connect(channel)
+}
+
+#[tauri::command]
+pub fn get_media_snapshot(media: State<'_, MediaService>) -> MediaSnapshot {
+    media.snapshot()
+}
+
+/// `sessionId: null` returns to automatic selection.
+#[tauri::command]
+pub async fn select_media_session(
+    media: State<'_, MediaService>,
+    session_id: Option<String>,
+) -> Result<MediaSnapshot> {
+    let id = session_id.as_deref().map(self::session_id).transpose()?;
+    Ok(media.request(Request::Select(id)).await?)
+}
+
+/// Sends a playback command. The returned snapshot does not yet contain its
+/// effect: confirmed state arrives through the channel once Windows reports it.
+#[tauri::command]
+pub async fn media_control(
+    media: State<'_, MediaService>,
+    session_id: String,
+    action: MediaAction,
+) -> Result<MediaSnapshot> {
+    let id = self::session_id(&session_id)?;
+    Ok(media.request(Request::Control(id, action)).await?)
+}
+
+/// Seeks to `positionMs` from the start of the media (clamped to its duration).
+#[tauri::command]
+pub async fn media_seek(
+    media: State<'_, MediaService>,
+    session_id: String,
+    position_ms: f64,
+) -> Result<MediaSnapshot> {
+    let id = self::session_id(&session_id)?;
+    if !position_ms.is_finite() || position_ms < 0.0 {
+        return Err(IslandyError::InvalidArgument(
+            "seek position must be finite and >= 0",
+        ));
+    }
+    Ok(media.request(Request::Seek(id, position_ms as u64)).await?)
+}
+
+/// Artwork by content key as a size-limited `data:image/jpeg` URL, or `null`
+/// when it is not (or no longer) cached.
+#[tauri::command]
+pub fn get_media_artwork(media: State<'_, MediaService>, key: String) -> Result<Option<String>> {
+    let valid =
+        key.len() <= 40 && key.starts_with('a') && key[1..].bytes().all(|b| b.is_ascii_hexdigit());
+    if !valid {
+        return Err(IslandyError::InvalidArgument("invalid artwork key"));
+    }
+    Ok(media.artwork(&key))
 }

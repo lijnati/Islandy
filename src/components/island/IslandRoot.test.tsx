@@ -3,6 +3,8 @@ import { MotionGlobalConfig } from "motion/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { dispatchIsland, islandStore } from "../../features/island/island-store";
+import { initialMediaState, mediaStore } from "../../features/media/media-store";
+import { session, snapshot } from "../../features/media/media-test-utils";
 import { IslandRoot } from "./IslandRoot";
 
 beforeAll(() => {
@@ -15,6 +17,7 @@ afterEach(() => {
     dispatchIsland({ type: "DISMISS" });
   });
   islandStore.dispose();
+  mediaStore.setState(initialMediaState);
   vi.useRealTimers();
 });
 
@@ -44,7 +47,7 @@ describe("IslandRoot (browser mode, no native shell)", () => {
     expect(
       screen.getByRole("button", { name: "Unpin dashboard" }).getAttribute("aria-pressed"),
     ).toBe("true");
-    expect(screen.getAllByText("Demo").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Demo")).toHaveLength(1); // activity only; media is real
 
     fireEvent.keyDown(window, { key: "Escape" });
     await settle();
@@ -93,12 +96,70 @@ describe("IslandRoot (browser mode, no native shell)", () => {
     ).toBe("true");
   });
 
-  it("demo play/pause only changes the demo state", async () => {
+  it("media widget says media is unavailable in a plain browser", async () => {
     render(<IslandRoot />);
     fireEvent.click(screen.getByRole("button", { name: /Open dashboard/ }));
     await settle();
-    fireEvent.click(screen.getByRole("button", { name: "Play (demo)" }));
-    expect(screen.getByRole("button", { name: "Pause (demo)" })).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Pause (demo)" }));
+    expect(screen.getByText("Media unavailable")).toBeDefined();
+  });
+
+  it("shows real session data in the pill and the widget, and an empty state", async () => {
+    mediaStore.setState({ connection: "connected" });
+    mediaStore.getState().applySnapshot(
+      snapshot({
+        revision: 1,
+        sessions: [
+          session({ title: "Ünïcode Song", artist: "Band" }),
+          session({
+            id: "s2",
+            sourceAppName: "Browser",
+            title: null,
+            artist: null,
+            playbackStatus: "paused",
+          }),
+        ],
+      }),
+    );
+    render(<IslandRoot />);
+    expect(
+      screen.getByRole("button", { name: /playing Ünïcode Song by Band\. Open dashboard/ }),
+    ).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: /Open dashboard/ }));
+    await settle();
+    expect(screen.getByText("Ünïcode Song")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Pause" })).toBeDefined();
+    expect(screen.getByRole("slider", { name: "Seek" })).toBeDefined();
+
+    // Session switcher lists both players.
+    fireEvent.click(screen.getByRole("button", { name: /Player: Player\. 2 players available/ }));
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(3);
+    expect(screen.getByText("Unknown track")).toBeDefined();
+
+    act(() => {
+      mediaStore.getState().applySnapshot(snapshot({ revision: 2, sessions: [] }));
+    });
+    expect(screen.getByText("Nothing playing")).toBeDefined();
+  });
+
+  it("unsupported controls are disabled and say so", async () => {
+    mediaStore.setState({ connection: "connected" });
+    const controls = {
+      play: true,
+      pause: true,
+      togglePlayPause: true,
+      next: false,
+      previous: false,
+      seek: false,
+    };
+    mediaStore
+      .getState()
+      .applySnapshot(snapshot({ revision: 1, sessions: [session({ controls })] }));
+    render(<IslandRoot />);
+    fireEvent.click(screen.getByRole("button", { name: /Open dashboard/ }));
+    await settle();
+    const next = screen.getByRole("button", { name: "Next track (not supported by Player)" });
+    expect(next.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByRole("slider")).toBeNull();
+    expect(screen.getByRole("progressbar", { name: "Playback position" })).toBeDefined();
   });
 });

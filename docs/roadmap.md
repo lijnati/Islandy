@@ -43,15 +43,28 @@ results.
 single-instance enforcement and start-with-Windows (Phase 5), Windows benchmark pass
 (before Phase 2 sign-off).
 
-## Phase 2: Media and audio
+## Phase 2: Native media ✅ (Windows runtime verification pending)
 
-- GSMTC service replacing `src/features/media/demo-media.ts` (same shape: track, playing,
-  position + timestamp): now playing, artwork, play/pause/next/previous.
-- Peek on track change (the demo already does this through the same `CONTEXT_EVENT`).
+- GSMTC media service (`src-tauri/src/services/media/`): dedicated MTA worker, event-driven
+  discovery of all sessions, stable session ids, selection policy with user override, metadata,
+  artwork (WIC-transcoded, cached by content), playback state and capabilities, timeline.
+- Real controls: play, pause, toggle, next, previous, seek, each checked against the app's
+  enabled controls and confirmed by Windows (no optimistic UI). Timeouts on every native call.
+- Revisioned, de-duplicated snapshots over a dedicated channel; stale responses ignored.
+- UI: real media widget and detail view (all empty/loading/error/unsupported states), session
+  switcher, artwork + playback indicator in the pill, peek on track change. Demo media removed.
+- Tests: 42 Rust media tests (selection, identity, normalization, timeline, coalescing,
+  commands, artwork, errors) and media store/model/UI tests in Vitest.
+
+**Exit gate still open:** run the Media section of the Windows checklist in `README.md` with a
+browser and at least one other player.
+
+**Moved to Phase 3:** Core Audio volume/mute and output devices (they belong with the native
+system controls).
+
+## Phase 3: System controls and dashboard integration
+
 - Core Audio: volume and mute with change notifications; read-only output device list.
-
-## Phase 3: System and context
-
 - Battery, network, CPU, and memory widgets (CPU and memory only while visible).
 - Fullscreen and exclusive-fullscreen detection: hide on that monitor.
 - Downloads-folder activity heuristic.
