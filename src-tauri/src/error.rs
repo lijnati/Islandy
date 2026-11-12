@@ -21,6 +21,8 @@ pub enum IslandyError {
     #[error(transparent)]
     Media(#[from] crate::services::media::MediaError),
     #[error(transparent)]
+    System(#[from] crate::services::system::SystemError),
+    #[error(transparent)]
     Tauri(#[from] tauri::Error),
 }
 
@@ -33,6 +35,7 @@ impl IslandyError {
             Self::Unsupported(_) => "unsupported",
             Self::Platform(_) => "platform",
             Self::Media(e) => e.kind(),
+            Self::System(e) => e.kind(),
             Self::Tauri(_) => "internal",
         }
     }
@@ -70,5 +73,10 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(json["kind"], "notFound");
+        let json = serde_json::to_value(IslandyError::from(
+            crate::services::system::SystemError::Denied,
+        ))
+        .unwrap();
+        assert_eq!(json["kind"], "denied");
     }
 }

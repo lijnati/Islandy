@@ -9,7 +9,7 @@ idle cost, fully local.
 
 ## Status
 
-**Phase 2: Native Windows media integration.** What exists today:
+**Phase 3: Native system dashboard and quick controls.** What exists today:
 
 - A black pill at the top center of the primary monitor (time, ambient glyph, media
   indicator) that expands with a spring animation into an ~820 × 248 dashboard on hover
@@ -27,21 +27,32 @@ idle cost, fully local.
 - Native frame coordination: the window is a fixed canvas and a window region limits drawing
   and clicks to the visible island, so nothing invisible blocks the desktop. Layouts are fitted
   to the monitor (DPI-aware, narrower on small screens).
-- Quick controls open the Windows Settings page for Wi-Fi, Bluetooth, sound and display; they
-  do not pretend to toggle anything. Islandy settings are marked "coming soon".
+- **System (Phase 3):** the toolbar's quick controls open compact panels inside the dashboard:
+  - **Sound:** the real master volume (Core Audio), mute, and the active output devices,
+    with a link to Sound settings for switching outputs.
+  - **System:** CPU, memory and battery. Sampling runs only while this panel is open.
+  - **Network:** internet connectivity as Windows assesses it, and the Wi-Fi radio.
+  - **Bluetooth:** the Bluetooth radio.
+  - **Display:** brightness for built-in panels (WMI) and DDC/CI monitors.
+  - Radio switches appear only where Windows allows them; otherwise the panels link to the
+    matching Settings page.
+  - Brief peeks for low battery, power changes, network loss and restore, and audio output
+    changes.
+  - See [docs/system.md](docs/system.md).
 
 **Demo data.** The activity widget shows local sample data, labelled _Demo_; it is not
 connected to Claude Code yet (Phase 4).
 
-Not built yet: volume/audio devices, system widgets, settings, autostart, single instance,
-fullscreen handling. See [docs/roadmap.md](docs/roadmap.md).
+Not built yet: Islandy's own settings, autostart, single instance, fullscreen handling,
+switching the default audio output (no documented Windows API). See [docs/roadmap.md](docs/roadmap.md).
 
 > **Verification note.** Islandy was developed on a Linux host. The Windows code paths compile
 > and pass `clippy` for `x86_64-pc-windows-msvc`, and a Windows build and installer
 > cross-compile (Phase 2: with the MinGW toolchain, `--target x86_64-pc-windows-gnu`), but
 > Windows-native runtime behavior (WebView2 transparency and window regions, focus handling,
-> Alt+Tab, the global shortcut, Settings pages, DPI on real monitors, and **all GSMTC media
-> behavior with real players**) has **not** been verified on a Windows machine. See the
+> Alt+Tab, the global shortcut, Settings pages, DPI on real monitors, **all GSMTC media
+> behavior with real players**, and **all Phase 3 system integration: Core Audio, battery,
+> network, radios, brightness**) has **not** been verified on a Windows machine. See the
 > checklist below.
 
 ## Tech stack
@@ -127,11 +138,15 @@ src/                      React frontend
                           IslandToolbar, QuickControls, ActivityBars, NowProvider
   components/widgets/     Media (+ SessionSwitcher, Artwork), Calendar (+ MonthGrid),
                           Activity (+ ActivityCard), details
-  components/ui/          IconButton, Tooltip, WidgetSurface, StatusIndicator
+  components/system/       Audio, System, Network, Bluetooth and Display panels
+  components/ui/          IconButton, Tooltip, WidgetSurface, StatusIndicator, LevelSlider,
+                          Switch, MeterBar
   features/island/        island-store (state machine + timers), window-coordinator,
                           layouts, useIslandFrame, useNativeBridge, native-status, format
   features/calendar/      calendar math (pure, tested)
   features/media/         media store (native snapshots, commands, artwork) + pure model
+  features/system/        system store (per-domain updates, slider coalescing, alerts) +
+                          pure model
   features/activity/      demo activity data (Phase 4 replaces it)
   hooks/                  useClock (minute-aligned), useNow, usePrefersReducedMotion
   services/               native.ts: the only module that calls Rust; types.ts: IPC types
@@ -143,12 +158,13 @@ src-tauri/                Rust backend
   src/commands.rs         IPC surface
   src/signals.rs          Rust → UI channel
   src/shortcut.rs         global toggle shortcut
-  src/services/           app_info.rs, system_settings.rs, media/ (GSMTC worker, see
-                          docs/media.md)
+  src/services/           app_info.rs, winrt.rs (shared WinRT helpers), media/ (GSMTC
+                          worker, see docs/media.md), system/ (audio, power, network,
+                          radios, metrics, brightness, settings; see docs/system.md)
   src/error.rs            serializable error type
   capabilities/           least-privilege permissions
-docs/                     product, architecture, media, Windows integration, security,
-                          performance, roadmap
+docs/                     product, architecture, media, system, Windows integration,
+                          security, performance, roadmap
 ```
 
 ## Identifiers to finalize before release
@@ -203,8 +219,8 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
 - [ ] Clicking another window while pinned collapses the island.
 - [ ] **Ctrl + Alt + Space** toggles the island from any app. With another app already owning
       the shortcut, Islandy logs the conflict and does not take it over.
-- [ ] Quick controls open the Wi-Fi, Bluetooth, Sound and Display Settings pages, and the
-      island collapses.
+- [ ] Quick controls open their panels in place; pressing the open one closes it. The
+      Settings button opens Windows Settings and the island collapses.
 - [ ] Opening a widget (click its title) shows the detail view; Back and Escape return.
 - [ ] Tray → **Preview peek (demo)** shows a peek that disappears after ~4 s.
 
@@ -226,6 +242,31 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
       to the other session) without errors.
 - [ ] Quit Islandy while media plays: it exits promptly.
 - [ ] Unicode and very long titles render and truncate cleanly.
+      **System (Phase 3)**. Record the hardware for each check (laptop/desktop, monitor model,
+      adapters).
+
+- [ ] Sound: the panel shows the default output and the same volume as the taskbar flyout.
+      Dragging the slider changes Windows' volume smoothly. Changing volume with keyboard keys
+      or the flyout moves Islandy's slider. Mute/unmute both ways.
+- [ ] Sound: switching the default output (Settings, or plugging in headphones) updates the
+      panel and shows an "Audio output changed" peek; unplugging the last device shows "No
+      audio output device".
+- [ ] Battery (laptop): the percentage and charge state match the Windows battery flyout.
+      Unplug/plug shows "On battery" / "Power connected" once. Low battery (≤ 20 %) peeks
+      once.
+- [ ] Desktop without battery: the System panel says "No battery", never a percentage.
+- [ ] CPU/RAM roughly match Task Manager; sampling stops when the panel closes (Islandy's CPU
+      returns to idle).
+- [ ] Network: disconnecting Wi-Fi/Ethernet shows "Offline" and, after ~3 s, a "Network
+      disconnected" peek; reconnecting shows "Connected to …". A network without internet
+      shows "No internet".
+- [ ] Wi-Fi/Bluetooth switches: either they work (Windows' own quick settings follow), or
+      they are absent with "Change it in Settings". Note whether Windows prompted for access.
+- [ ] Brightness: works on a laptop panel; works on a DDC/CI monitor (or reports "Not
+      supported" honestly); multi-monitor setups list each controllable display.
+- [ ] Settings links open Sound, Network, Wi-Fi, Bluetooth, Display, Power & battery and
+      Settings home.
+- [ ] Quitting with the System or Display panel open exits promptly.
 - [ ] Idle CPU with music playing and the island collapsed stays near the idle budget
       (see `docs/performance.md`).
 - [ ] With Windows _Animation effects_ turned off, transitions are instant.
@@ -245,6 +286,13 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
 - **Contextual events while the dashboard is open are dropped**, not queued.
 - **Media** shows only what each app publishes through Windows media sessions; see
   [docs/media.md](docs/media.md) for media-specific limitations.
+- **System:**
+  - The default audio output can't be switched from Islandy (no documented API).
+  - Brightness depends on WMI (built-in panels) or DDC/CI (monitors), and many monitors,
+    docks and adapters lack the latter.
+  - Paired Bluetooth devices are not listed.
+  - Radio switches depend on Windows granting access.
+  - See [docs/system.md](docs/system.md).
 - **12/24-hour format** follows the WebView language, not a custom Windows regional format.
 - **Display changes:** the island re-fits on the next interaction and on DPI changes; a
   resolution or taskbar change does not move the resting pill immediately.

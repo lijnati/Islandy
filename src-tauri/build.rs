@@ -16,6 +16,13 @@ fn main() {
             "media_control",
             "media_seek",
             "get_media_artwork",
+            "connect_system",
+            "get_system_snapshot",
+            "set_system_focus",
+            "set_master_volume",
+            "set_audio_muted",
+            "set_radio_state",
+            "set_display_brightness",
         ]),
     ))
     .expect("failed to run tauri-build");

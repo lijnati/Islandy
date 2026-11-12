@@ -11,7 +11,7 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::{
     commands,
-    services::media::MediaService,
+    services::{media::MediaService, system::SystemService},
     shortcut,
     signals::{self, IslandSignal, SignalHub},
     window::{IslandWindow, WindowState},
@@ -39,11 +39,20 @@ pub fn run() {
             commands::media_control,
             commands::media_seek,
             commands::get_media_artwork,
+            commands::connect_system,
+            commands::get_system_snapshot,
+            commands::set_system_focus,
+            commands::set_master_volume,
+            commands::set_audio_muted,
+            commands::set_radio_state,
+            commands::set_display_brightness,
         ])
         .setup(|app| {
             setup_tray(app)?;
             // Media runs on its own worker thread; starting it never blocks.
             app.manage(MediaService::start()?);
+            // Audio, power, network and display run on their own workers.
+            app.manage(SystemService::start()?);
             let status = shortcut::register(app.handle());
             app.manage(status);
             let island = IslandWindow::get(app.handle())?;
@@ -97,6 +106,10 @@ pub fn run() {
             // Unregister WinRT media event handlers (bounded wait).
             if let Some(media) = app.try_state::<MediaService>() {
                 media.shutdown();
+            }
+            // Unregister Core Audio / WinRT callbacks (bounded waits).
+            if let Some(system) = app.try_state::<SystemService>() {
+                system.shutdown();
             }
         }
     });

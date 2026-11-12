@@ -3,6 +3,11 @@ import { useEffect, useRef, type PointerEvent } from "react";
 
 import { breakpoints, motion } from "../../design/tokens";
 import { dispatchIsland, useIsland, type WidgetId } from "../../features/island/island-store";
+import { AudioPanel } from "../system/AudioPanel";
+import { BluetoothPanel } from "../system/BluetoothPanel";
+import { DisplayPanel } from "../system/DisplayPanel";
+import { NetworkPanel } from "../system/NetworkPanel";
+import { SystemPanel } from "../system/SystemPanel";
 import { ActivityDetail, ActivityWidget } from "../widgets/ActivityWidget";
 import { CalendarDetail, CalendarWidget } from "../widgets/CalendarWidget";
 import { MediaDetail, MediaWidget } from "../widgets/MediaWidget";
@@ -12,6 +17,12 @@ const DETAILS: Record<WidgetId, () => React.JSX.Element> = {
   media: MediaDetail,
   calendar: CalendarDetail,
   activity: ActivityDetail,
+  // System panels, opened from the quick controls.
+  audio: AudioPanel,
+  system: SystemPanel,
+  network: NetworkPanel,
+  bluetooth: BluetoothPanel,
+  display: DisplayPanel,
 };
 
 /** Clicking empty dashboard space (not a control) pins it open. */

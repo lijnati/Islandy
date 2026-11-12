@@ -67,6 +67,27 @@ about 160 MB in a **debug** build. This is not comparable with the release figur
 says nothing about GSMTC cost on Windows, which must be measured with real players
 (idle-collapsed with music playing is the important case).
 
+Phase 3 (debug build, Xvfb, Linux, under the same conditions as Phase 2):
+
+- Only CPU and memory are real on Linux (from `/proc`); the other domains report
+  "unsupported".
+- With the System panel open, real samples reached the UI every 2 s (3 % CPU; 10 % memory,
+  consistent with `free`).
+- RSS of `islandy` stayed at about 160 MB before, during and after sampling (159,964 /
+  159,736 / 160,116 KB).
+- `ps` %CPU (a lifetime average, so only a sanity check) was 1.4–2.6 %.
+- Not measured: anything on Windows (Core Audio callbacks, WinRT events, DDC/CI latency) and
+  a release build.
+
+What Phase 3 does to stay light:
+
+- No permanent polling. Power, network, radios and audio are event-driven.
+- CPU/RAM are sampled only while the System panel is open.
+- Brightness is re-read every 4 s only while the Display panel is open.
+- Volume bursts are coalesced (40 ms), and the slider sends at most one request in flight,
+  at most every 50 ms.
+- Output devices are enumerated only on device events.
+
 ## How to benchmark on Windows (to do before Phase 1 sign-off)
 
 1. **Release build only:** `pnpm tauri build`, then run the installed app.

@@ -136,6 +136,28 @@ through `MediaHub` only when something meaningful changed. Commands are executed
 worker with timeouts. The UI's `media-store` applies snapshots only if their revision is newer.
 Details: [media.md](media.md).
 
+## System
+
+`services/system/` runs three worker threads in the multithreaded COM apartment:
+
+- **audio:** Core Audio.
+- **monitor:** power, network, radios, CPU/RAM.
+- **display:** brightness, where DDC/CI calls are slow.
+
+Native callbacks only post messages. Each worker re-reads its domain, and `SystemHub`
+pushes a `SystemUpdate` for that domain only, with a revision, if it changed. Alerts (low
+battery, power, network, audio output) are de-duplicated in Rust, again in the UI, and shown
+as peeks.
+
+The UI tells Rust what it shows (`set_system_focus`):
+
+- CPU/RAM are sampled only while the System panel is open.
+- Brightness is polled only while the Display panel is open.
+
+The panels are views of the existing `focused` mode (`WidgetId` includes `audio`, `system`,
+`network`, `bluetooth` and `display`), so they share the dashboard's geometry and
+transitions. Details: [system.md](system.md).
+
 ## Focus and keyboard
 
 - By default the window is non-activating (`WS_EX_NOACTIVATE`): hovering and clicking
@@ -212,6 +234,7 @@ playing.
 ## Related documents
 
 - [media.md](media.md): GSMTC integration, selection policy, events, artwork.
+- [system.md](system.md): audio, power, network, radios, metrics, brightness, settings.
 - [security.md](security.md): capabilities, CSP, and local-integration rules.
 - [performance.md](performance.md): budgets and the benchmark plan.
 - [windows-integration.md](windows-integration.md): research for future native features.

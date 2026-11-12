@@ -2,4 +2,6 @@
 
 pub mod app_info;
 pub mod media;
-pub mod system_settings;
+pub mod system;
+#[cfg(windows)]
+pub mod winrt;

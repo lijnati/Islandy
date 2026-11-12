@@ -15,8 +15,12 @@ import type {
   MediaSnapshot,
   NativeErrorKind,
   NativeErrorPayload,
+  RadioKind,
   SettingsPage,
   Size,
+  SystemFocus,
+  SystemSnapshot,
+  SystemUpdate,
 } from "./types";
 
 export class NativeError extends Error {
@@ -158,4 +162,53 @@ export function mediaSeek(sessionId: string, positionMs: number): Promise<MediaS
 /** A `data:image/jpeg` URL for an artwork key, or `null` if no longer cached. */
 export function getMediaArtwork(key: string): Promise<string | null> {
   return call<string | null>("get_media_artwork", { key });
+}
+
+/* ------------------------------------------------------------------------ */
+/* System                                                                    */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Registers the system update handler and returns the current snapshot.
+ * Calling it again replaces the previous handler (Rust keeps one channel).
+ */
+export function connectSystem(onUpdate: (update: SystemUpdate) => void): Promise<SystemSnapshot> {
+  if (!isTauri()) {
+    return Promise.reject(
+      new NativeError(
+        "connect_system",
+        "unavailable",
+        "not running inside the Islandy desktop shell",
+      ),
+    );
+  }
+  const channel = new Channel<SystemUpdate>();
+  channel.onmessage = onUpdate;
+  return call<SystemSnapshot>("connect_system", { channel });
+}
+
+export function getSystemSnapshot(): Promise<SystemSnapshot> {
+  return call<SystemSnapshot>("get_system_snapshot");
+}
+
+/** Starts/stops CPU/RAM sampling and brightness polling. */
+export function setSystemFocus(focus: SystemFocus): Promise<void> {
+  return call<undefined>("set_system_focus", { focus });
+}
+
+/** 0–100. Resolves once Windows accepted it; the new state arrives as an update. */
+export function setMasterVolume(volume: number): Promise<void> {
+  return call<undefined>("set_master_volume", { volume });
+}
+
+export function setAudioMuted(muted: boolean): Promise<void> {
+  return call<undefined>("set_audio_muted", { muted });
+}
+
+export function setRadioState(radio: RadioKind, on: boolean): Promise<void> {
+  return call<undefined>("set_radio_state", { radio, on });
+}
+
+export function setDisplayBrightness(displayId: string, brightness: number): Promise<void> {
+  return call<undefined>("set_display_brightness", { displayId, brightness });
 }

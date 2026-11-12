@@ -12,7 +12,15 @@ import { interaction } from "../../design/tokens";
  */
 export type IslandMode = "collapsed" | "peek" | "expanded" | "focused";
 
-export type WidgetId = "media" | "calendar" | "activity";
+/**
+ * Views shown in `focused` mode: widget detail views and the system panels
+ * opened from the quick controls (same state machine, same geometry).
+ */
+export type WidgetId =
+  "media" | "calendar" | "activity" | "audio" | "system" | "network" | "bluetooth" | "display";
+
+export type PeekIcon =
+  "battery" | "batteryLow" | "plug" | "wifi" | "network" | "offline" | "speaker";
 
 export type StatusTone = "neutral" | "working" | "success" | "attention";
 
@@ -24,6 +32,8 @@ export interface PeekContent {
   tone: StatusTone;
   /** Media peeks show the track's artwork instead of the glyph. */
   artworkKey?: string | null;
+  /** System peeks show a matching icon. */
+  icon?: PeekIcon;
 }
 
 export type IslandEvent =

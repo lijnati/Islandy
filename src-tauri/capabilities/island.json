@@ -15,6 +15,13 @@
     "allow-select-media-session",
     "allow-media-control",
     "allow-media-seek",
-    "allow-get-media-artwork"
+    "allow-get-media-artwork",
+    "allow-connect-system",
+    "allow-get-system-snapshot",
+    "allow-set-system-focus",
+    "allow-set-master-volume",
+    "allow-set-audio-muted",
+    "allow-set-radio-state",
+    "allow-set-display-brightness"
   ]
 }

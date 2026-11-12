@@ -5,14 +5,10 @@
 //! that never answers cannot stall the worker. Event handlers do no work:
 //! they post a [`NativeEvent`] to the worker and return.
 
-use std::{
-    collections::HashMap,
-    sync::mpsc::{self, Sender},
-    time::Duration,
-};
+use std::{collections::HashMap, sync::mpsc::Sender, time::Duration};
 
 use windows::{
-    core::{IUnknown, Interface, RuntimeType, HSTRING},
+    core::{IUnknown, Interface, HSTRING},
     ApplicationModel::AppInfo,
     Foundation::TypedEventHandler,
     Graphics::Imaging::{
@@ -29,9 +25,10 @@ use windows::{
         Buffer, DataReader, DataWriter, IInputStream, IRandomAccessStreamReference,
         InMemoryRandomAccessStream, InputStreamOptions,
     },
-    Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED},
 };
-use windows_future::{IAsyncAction, IAsyncOperation, IAsyncOperationWithProgress};
+
+pub use crate::services::winrt::with_mta;
+use crate::services::winrt::{self, Pending, WaitError};
 
 use super::{
     artwork,
@@ -48,19 +45,6 @@ const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(3);
 /// Decoded images above this edge length are refused (decompression bombs).
 const MAX_DECODE_EDGE: u32 = 8192;
-
-/// Runs `f` on the current thread inside the multithreaded apartment.
-pub fn with_mta<R>(f: impl FnOnce() -> R) -> R {
-    // SAFETY: plain COM initialization for the current (worker) thread,
-    // balanced by CoUninitialize below when it succeeded.
-    let initialized = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok();
-    let result = f();
-    if initialized {
-        // SAFETY: matches the successful CoInitializeEx above.
-        unsafe { CoUninitialize() };
-    }
-    result
-}
 
 /// HRESULTs that mean "the app (and its session) went away".
 fn is_gone(code: i32) -> bool {
@@ -82,60 +66,15 @@ fn platform(e: windows::core::Error) -> MediaError {
     }
 }
 
-/// A WinRT async operation that can be awaited with a timeout.
-///
-/// The completion callback runs on a system thread and only signals; the
-/// result (often a non-`Send` interface such as `IBuffer`) is fetched with
-/// `GetResults` back on the worker thread, so no WinRT object is moved
-/// across threads by Islandy.
-trait Pending {
-    type Output;
-    fn on_done(&self, f: impl FnOnce() + Send + 'static) -> windows::core::Result<()>;
-    fn results(&self) -> windows::core::Result<Self::Output>;
-    fn cancel(&self);
-}
-
-macro_rules! impl_pending {
-    ($([$($generics:tt)*] $ty:ty => $out:ty;)*) => {$(
-        impl<$($generics)*> Pending for $ty {
-            type Output = $out;
-            fn on_done(&self, f: impl FnOnce() + Send + 'static) -> windows::core::Result<()> {
-                self.when(move |_| f())
-            }
-            fn results(&self) -> windows::core::Result<$out> {
-                self.GetResults()
-            }
-            fn cancel(&self) {
-                let _ = self.Cancel();
-            }
-        }
-    )*};
-}
-
-impl_pending! {
-    [T: RuntimeType + 'static] IAsyncOperation<T> => T;
-    [T: RuntimeType + 'static, P: RuntimeType + 'static] IAsyncOperationWithProgress<T, P> => T;
-    [] IAsyncAction => ();
-}
-
-/// Waits for `op` without blocking forever; cancels it on timeout.
+/// Waits for `op` with a timeout, mapping failures to [`MediaError`].
 fn wait<P: Pending>(
     op: windows::core::Result<P>,
     timeout: Duration,
 ) -> Result<P::Output, MediaError> {
-    let op = op.map_err(platform)?;
-    let (tx, rx) = mpsc::sync_channel(1);
-    op.on_done(move || {
-        let _ = tx.send(());
+    winrt::wait(op, timeout).map_err(|e| match e {
+        WaitError::Timeout => MediaError::Timeout,
+        WaitError::Failed(e) => platform(e),
     })
-    .map_err(platform)?;
-    match rx.recv_timeout(timeout) {
-        Ok(()) => op.results().map_err(platform),
-        Err(_) => {
-            op.cancel();
-            Err(MediaError::Timeout)
-        }
-    }
 }
 
 /// Reads exactly `size` bytes (or until the stream ends).
