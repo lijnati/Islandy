@@ -8,7 +8,9 @@
 //! - [`commands`]  the Tauri IPC surface exposed to the frontend
 //! - [`services`]  application services used by commands
 //! - [`signals`]   Rust → frontend push channel
-//! - [`shortcut`]  global toggle shortcut
+//! - [`shortcut`]  global toggle shortcut (configurable)
+//! - [`tray`]      notification-area icon and menu
+//! - [`settings_window`] the separate settings window
 //! - [`error`]     the shared, serializable error type
 
 mod app;
@@ -17,8 +19,10 @@ mod commands;
 mod error;
 mod platform;
 mod services;
+mod settings_window;
 mod shortcut;
 mod signals;
+mod tray;
 mod window;
 
 pub use app::run;

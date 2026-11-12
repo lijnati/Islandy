@@ -1,6 +1,6 @@
 use super::*;
 use crate::services::activity::{
-    model::ToolCategory,
+    model::{PeekDuration, ToolCategory},
     protocol::{session_key, ClaudeHook as H},
 };
 
@@ -611,4 +611,138 @@ fn dwell_times_follow_the_priority_table() {
     assert_eq!(dwell_ms(Priority::P2, Severity::Info), Some(3_000));
     assert_eq!(dwell_ms(Priority::P2, Severity::Success), Some(4_000));
     assert_eq!(dwell_ms(Priority::P3, Severity::Error), None);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Notification preferences (Phase 5)                                      */
+/* ---------------------------------------------------------------------- */
+
+fn message(title: &str, severity: Severity) -> Input {
+    Input::Developer(DeveloperWire {
+        title: Some(title.into()),
+        severity: Some(severity),
+        ..dev(DeveloperEvent::Message)
+    })
+}
+
+fn with(f: impl FnOnce(&mut ActivitySettings)) -> ActivityEngine {
+    let mut settings = ActivitySettings::default();
+    f(&mut settings);
+    ActivityEngine::new(settings, T0)
+}
+
+#[test]
+fn peek_switches_filter_by_source_and_outcome_but_still_record() {
+    let mut e = with(|s| s.peeks.developer = false);
+    let out = e.ingest(Input::Developer(dev(DeveloperEvent::BuildFailed)), T0);
+    assert!(out.changed && out.peek.is_none());
+    assert_eq!(snap(&e).events.len(), 1, "recorded anyway");
+
+    let mut e = with(|s| s.peeks.success = false);
+    assert!(e
+        .ingest(message("ok", Severity::Success), T0)
+        .peek
+        .is_none());
+    assert!(e.ingest(message("bad", Severity::Error), T0).peek.is_some());
+
+    let mut e = with(|s| s.peeks.errors = false);
+    assert!(e.ingest(message("bad", Severity::Error), T0).peek.is_none());
+    assert!(e
+        .ingest(message("warn", Severity::Warning), T0)
+        .peek
+        .is_none());
+    assert!(e
+        .ingest(message("ok", Severity::Success), T0)
+        .peek
+        .is_some());
+
+    // Claude attention respects its source switch (the pill indicator stays).
+    let mut e = with(|s| s.peeks.claude_code = false);
+    let out = e.ingest(c("s1", H::PermissionRequest), T0);
+    assert!(out.peek.is_none());
+    assert_eq!(session(&snap(&e), "s1").status, SessionStatus::Attention);
+}
+
+#[test]
+fn peek_duration_scales_dwell_times() {
+    let mut short = with(|s| s.peek_duration = PeekDuration::Short);
+    let mut long = with(|s| s.peek_duration = PeekDuration::Long);
+    let failed = || Input::Developer(dev(DeveloperEvent::BuildFailed));
+    assert_eq!(short.ingest(failed(), T0).peek.unwrap().dwell_ms, 4_500);
+    assert_eq!(long.ingest(failed(), T0).peek.unwrap().dwell_ms, 9_000);
+}
+
+#[test]
+fn one_noisy_source_cannot_dominate_the_island() {
+    let mut e = engine();
+    let mut peeks = 0;
+    for i in 0..20 {
+        let title = format!("message {i}");
+        if e.ingest(message(&title, Severity::Info), T0 + i * 1000)
+            .peek
+            .is_some()
+        {
+            peeks += 1;
+        }
+    }
+    assert_eq!(peeks, PEEK_BUDGET, "rate limited within a minute");
+    assert_eq!(snap(&e).events.len(), 20, "every event is still recorded");
+    // Another source is unaffected.
+    let out = e.ingest(c("s1", H::Stop), T0 + 21_000);
+    assert!(out.peek.is_some());
+    // P0 attention is never rate limited.
+    for i in 0..6 {
+        let s = format!("p{i}");
+        assert!(e
+            .ingest(c(&s, H::PermissionRequest), T0 + 22_000 + i)
+            .peek
+            .is_some());
+    }
+    // The budget refills after the window.
+    let out = e.ingest(
+        message("later", Severity::Info),
+        T0 + 20_000 + PEEK_WINDOW_MS,
+    );
+    assert!(out.peek.is_some());
+}
+
+#[test]
+fn retention_follows_the_setting() {
+    let mut e = with(|s| s.retention_days = 1);
+    e.ingest(message("old", Severity::Info), T0);
+    e.ingest(message("new", Severity::Info), T0 + 20 * HOUR);
+    e.tick(T0 + DAY + HOUR);
+    let titles: Vec<_> = snap(&e).events.iter().map(|e| e.title.clone()).collect();
+    assert_eq!(titles, ["new"]);
+    assert_eq!(e.next_deadline(), Some(T0 + 20 * HOUR + DAY + 1));
+}
+
+#[test]
+fn applying_settings_switches_sources_and_shortens_retention() {
+    let mut e = engine();
+    e.ingest(c("s1", H::SessionStart), T0);
+    e.ingest(message("a", Severity::Info), T0);
+    let mut next = ActivitySettings::default();
+    next.sources.claude_code = false;
+    next.retention_days = 200; // clamped to 30
+    let out = e.apply_settings(next, T0 + 5 * DAY);
+    assert!(out.changed && out.persist);
+    assert!(snap(&e).sessions.is_empty(), "Claude sessions forgotten");
+    assert_eq!(e.settings().retention_days, 30);
+    assert!(!e.apply_settings(e.settings(), T0).changed, "no-op");
+    next.retention_days = 1;
+    e.apply_settings(next, T0 + 5 * DAY);
+    assert!(
+        snap(&e).events.is_empty(),
+        "older than a day: removed at once"
+    );
+}
+
+#[test]
+fn last_received_tracks_unrecorded_tool_events() {
+    let mut e = engine();
+    assert_eq!(snap(&e).last_received, LastReceived::default());
+    e.ingest(tool("s1", H::PreToolUse, ToolCategory::Reading), T0 + 5);
+    assert_eq!(snap(&e).last_received.claude_code, Some(T0 + 5));
+    assert_eq!(snap(&e).last_received.developer, None);
 }

@@ -57,15 +57,44 @@ Notes and risks:
   10/11 is **unverified**. If the island renders blank or with artifacts, run with
   `ISLANDY_FRAME_STRATEGY=resize` and report it; a per-pixel alternative is to keep the
   canvas and return `HTTRANSPARENT` from `WM_NCHITTEST` outside the frame (window subclass).
-- **Display changes.** Tauri has no monitor-change event. Phase 1 re-reads the monitor on
-  every layout request and frame change (i.e. on the next hover), and on DPI changes. Still
-  planned: handle `WM_DISPLAYCHANGE` and `WM_SETTINGCHANGE`/`SPI_SETWORKAREA` so the resting
-  pill moves immediately when the taskbar or resolution changes.
+- **Display changes.** Tauri has no monitor-change event. The monitor is re-read on every
+  layout request and frame change, on DPI changes, and (Phase 5) every 2 s by a watcher, so a
+  resolution, scaling, taskbar or monitor (dis)connection change re-places the resting pill
+  within about 2 s, including after sleep/resume and an Explorer restart.
 - **Click-through corners.** The region is the frame's bounding rectangle, so the few
   transparent pixels at the rounded corners still receive clicks. A rounded region would fix
   it at the cost of aliased edges; `WM_NCHITTEST` → `HTTRANSPARENT` is the per-pixel option.
 
-### Fullscreen and maximized applications (recommendation for a later phase)
+### Phase 5: lifecycle, placement and fullscreen (implemented; unverified on Windows)
+
+- **Placement.** The island goes on the selected monitor (Windows monitor name; falls back to
+  the primary, then any monitor) at top-left/center/right with an offset and top margin, clamped
+  12 px inside the work area. Coordinates come straight from Windows, so negative origins and a
+  primary monitor that isn't at (0,0) work (unit-tested in `geometry.rs`). The surface is aligned
+  inside the canvas to match (`Align`), and the window region follows that alignment.
+- **Fullscreen apps.** Every 2 s (`app.rs` watcher, on the main thread) Islandy checks whether the
+  foreground window covers the island's whole monitor (`GetForegroundWindow`, `GetWindowRect`;
+  maximized/minimized windows, the desktop and the taskbar are excluded). If so the island is
+  hidden (`window.hide()`) and shown again afterwards. This covers borderless fullscreen and,
+  indirectly, exclusive fullscreen (the island is hidden before it can interfere). A periodic
+  check was chosen over `SetWinEventHook` because it also catches apps that go fullscreen in place,
+  needs no hook, and costs a few microseconds per check. Can be turned off in Settings › General.
+- **Tray.** One icon (`tray.rs`); left click opens the dashboard, right click the menu. The
+  `tray-icon` crate re-adds the icon on `TaskbarCreated` (Explorer restart).
+- **Single instance** (`tauri-plugin-single-instance`): a second launch exits and the running
+  instance opens Settings.
+- **Hide vs quit.** Hide keeps everything running (the receiver, media and system workers);
+  Quit exits the event loop, and `RunEvent::Exit` stops the watcher, unregisters the shortcut and
+  shuts down media, system and activity services (bounded waits).
+- **Launch at sign-in.** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Islandy` =
+  `"<path>\islandy.exe" --autostart`; `StartupApproved\Run` is honoured for "disabled in Task
+  Manager". The entry is re-pointed at the current executable on start (release builds) if the
+  app moved. The uninstaller removes it.
+- **Session end.** Windows ending the session terminates the process without `RunEvent::Exit`:
+  activity history written within the last 1.5 s may be lost, and a stale `receiver.json` stays
+  until the next start (clients then fail fast). Not yet handled.
+
+### Fullscreen and maximized applications (analysis from Phase 1)
 
 | Situation                                                | What happens with a topmost window                                                                                              | Recommendation                                                                        |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |

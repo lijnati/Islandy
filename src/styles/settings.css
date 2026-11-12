@@ -1,0 +1,23 @@
+/*
+ * The settings window is an ordinary, opaque, decorated window (unlike the
+ * transparent island window).
+ */
+@theme {
+  --color-settings: #0e0e0f;
+}
+
+[data-theme="graphite"] {
+  --color-settings: #19191b;
+}
+
+[data-theme="frost"] {
+  --color-settings: #15171c;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    background: var(--color-settings);
+  }
+}

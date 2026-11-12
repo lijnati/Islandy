@@ -6,7 +6,7 @@
  */
 import type { Transition } from "motion/react";
 
-import type { IslandLayouts } from "../services/types";
+import type { IslandLayouts, SizePreset } from "../services/types";
 
 /** Interaction timing (ms). */
 export const interaction = {
@@ -69,13 +69,30 @@ export const designLayouts: IslandLayouts = {
   ambient: { width: 300, height: 44 },
   peek: { width: 360, height: 48 },
   expanded: { width: 820, height: 248 },
+  align: "center",
 };
 
-/** Container widths (logical px) below which dashboard widgets are dropped. */
-export const breakpoints = {
-  hideActivity: 700,
-  hideCalendar: 500,
-} as const;
+/** Pill sizes per size preset. Mirrors `geometry::PillSizes::for_preset`. */
+export const PILL_SIZES: Record<
+  SizePreset,
+  Pick<IslandLayouts, "collapsed" | "ambient" | "peek">
+> = {
+  compact: {
+    collapsed: { width: 200, height: 40 },
+    ambient: { width: 280, height: 40 },
+    peek: { width: 340, height: 44 },
+  },
+  standard: {
+    collapsed: { width: 220, height: 44 },
+    ambient: { width: 300, height: 44 },
+    peek: { width: 360, height: 48 },
+  },
+  comfortable: {
+    collapsed: { width: 260, height: 48 },
+    ambient: { width: 330, height: 48 },
+    peek: { width: 390, height: 52 },
+  },
+};
 
 export const zIndex = {
   base: 0,

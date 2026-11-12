@@ -24,7 +24,7 @@ const chip = (active: boolean) =>
     "inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-caption font-medium transition-colors duration-fast ease-standard",
     focusRing,
     active
-      ? "bg-fg text-surface"
+      ? "bg-accent text-on-accent"
       : "border border-hairline text-fg-muted hover:bg-surface-hover hover:text-fg",
   );
 

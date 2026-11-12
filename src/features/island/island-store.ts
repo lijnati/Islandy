@@ -82,7 +82,9 @@ export type IslandEvent =
   | { type: "SHORTCUT" }
   | { type: "CONTEXT_EVENT"; peek: PeekContent }
   /** A peek's dwell time elapsed; `seq` identifies which peek. */
-  | { type: "PEEK_TIMEOUT"; seq: number };
+  | { type: "PEEK_TIMEOUT"; seq: number }
+  /** A pinned dashboard was left alone for `PINNED_IDLE_MS` (auto-collapse). */
+  | { type: "IDLE_TIMEOUT" };
 
 export interface IslandState {
   mode: IslandMode;
@@ -117,6 +119,8 @@ const COLLAPSED: Pick<IslandState, "mode" | "pinned" | "hovering" | "activeWidge
   peek: null,
 };
 
+const isDashboard = (mode: IslandMode) => mode === "expanded" || mode === "focused";
+
 function open(state: IslandState, pinned: boolean): IslandState {
   return { ...state, mode: "expanded", pinned, activeWidget: null, peek: null };
 }
@@ -129,6 +133,28 @@ function collapse(state: IslandState): IslandState {
   return { ...state, ...COLLAPSED };
 }
 
+/** User interaction preferences (Settings › Island). */
+export interface IslandBehavior {
+  /** Hovering the pill opens the dashboard (after the hover delay). */
+  openOnHover: boolean;
+  /** Clicking the pill opens the dashboard. */
+  openOnClick: boolean;
+  /** A click opens the dashboard pinned (keyboard focus, stays open). */
+  pinOnClick: boolean;
+  /** A pinned dashboard collapses after being left alone for `PINNED_IDLE_MS`. */
+  autoCollapse: boolean;
+}
+
+export const defaultBehavior: IslandBehavior = {
+  openOnHover: true,
+  openOnClick: true,
+  pinOnClick: true,
+  autoCollapse: false,
+};
+
+/** Mirrors `PINNED_IDLE_MS` in `services/settings/models.rs`. */
+export const PINNED_IDLE_MS = 15_000;
+
 /**
  * Pure transition function. Rules:
  * 1. The user beats the system: contextual events never interrupt the
@@ -139,7 +165,11 @@ function collapse(state: IslandState): IslandState {
  *    or the shortcut.
  * Unhandled events return the same object (a no-op for subscribers).
  */
-export function transition(state: IslandState, event: IslandEvent): IslandState {
+export function transition(
+  state: IslandState,
+  event: IslandEvent,
+  behavior: IslandBehavior = defaultBehavior,
+): IslandState {
   const { mode } = state;
   switch (event.type) {
     case "POINTER_ENTER":
@@ -147,13 +177,15 @@ export function transition(state: IslandState, event: IslandEvent): IslandState 
     case "POINTER_LEAVE":
       return state.hovering ? { ...state, hovering: false } : state;
     case "HOVER_INTENT":
-      return state.hovering && (mode === "collapsed" || mode === "peek")
+      return behavior.openOnHover && state.hovering && (mode === "collapsed" || mode === "peek")
         ? open(state, false)
         : state;
     case "LEAVE_INTENT":
       return !state.hovering && mode === "expanded" && !state.pinned ? collapse(state) : state;
     case "PRESS":
-      if (mode === "collapsed" || mode === "peek") return open(state, true);
+      if (mode === "collapsed" || mode === "peek") {
+        return behavior.openOnClick ? open(state, behavior.pinOnClick) : state;
+      }
       return mode === "expanded" && !state.pinned ? { ...state, pinned: true } : state;
     case "TOGGLE_PIN":
       return mode === "expanded" || mode === "focused"
@@ -178,6 +210,10 @@ export function transition(state: IslandState, event: IslandEvent): IslandState 
       return { ...state, mode: "peek", peek: event.peek, peekSeq: state.peekSeq + 1 };
     case "PEEK_TIMEOUT":
       return mode === "peek" && event.seq === state.peekSeq ? collapse(state) : state;
+    case "IDLE_TIMEOUT":
+      return behavior.autoCollapse && state.pinned && !state.hovering && isDashboard(mode)
+        ? collapse(state)
+        : state;
   }
 }
 
@@ -194,7 +230,7 @@ export interface IslandDelays {
   peekMs: number;
 }
 
-type TimerSlot = "hover" | "leave" | "peek";
+type TimerSlot = "hover" | "leave" | "peek" | "idle";
 
 interface DesiredTimer {
   /** Identity: a timer is restarted only when its key changes. */
@@ -212,11 +248,12 @@ interface DesiredTimer {
 export function desiredTimers(
   state: IslandState,
   delays: IslandDelays,
+  behavior: IslandBehavior = defaultBehavior,
 ): Record<TimerSlot, DesiredTimer | null> {
   const { mode, hovering } = state;
   return {
     hover:
-      hovering && (mode === "collapsed" || mode === "peek")
+      behavior.openOnHover && hovering && (mode === "collapsed" || mode === "peek")
         ? { key: "hover", ms: delays.hoverMs, event: { type: "HOVER_INTENT" } }
         : null,
     leave:
@@ -232,6 +269,10 @@ export function desiredTimers(
             event: { type: "PEEK_TIMEOUT", seq: state.peekSeq },
           }
         : null,
+    idle:
+      behavior.autoCollapse && state.pinned && !hovering && isDashboard(mode)
+        ? { key: "idle", ms: PINNED_IDLE_MS, event: { type: "IDLE_TIMEOUT" } }
+        : null,
   };
 }
 
@@ -241,6 +282,7 @@ export interface IslandStoreState extends IslandState {
 
 export interface IslandStoreOptions {
   delays?: Partial<IslandDelays>;
+  behavior?: Partial<IslandBehavior>;
 }
 
 export const defaultDelays: IslandDelays = {
@@ -250,12 +292,15 @@ export const defaultDelays: IslandDelays = {
 };
 
 export function createIslandStore(options: IslandStoreOptions = {}) {
-  const delays: IslandDelays = { ...defaultDelays, ...options.delays };
+  let delays: IslandDelays = { ...defaultDelays, ...options.delays };
+  let behavior: IslandBehavior = { ...defaultBehavior, ...options.behavior };
   const running = new Map<TimerSlot, { key: string; handle: ReturnType<typeof setTimeout> }>();
+
+  let syncTimersFor: (state: IslandState) => void = () => undefined;
 
   const store = createStore<IslandStoreState>()((set, get) => {
     const syncTimers = (state: IslandState) => {
-      const desired = desiredTimers(state, delays);
+      const desired = desiredTimers(state, delays, behavior);
       for (const slot of Object.keys(desired) as TimerSlot[]) {
         const want = desired[slot];
         const have = running.get(slot);
@@ -274,11 +319,13 @@ export function createIslandStore(options: IslandStoreOptions = {}) {
       }
     };
 
+    syncTimersFor = syncTimers;
+
     return {
       ...initialIslandState,
       dispatch: (event) => {
         const current = get();
-        const next = transition(current, event);
+        const next = transition(current, event, behavior);
         if (next === current) return;
         set(next);
         syncTimers(next);
@@ -292,7 +339,26 @@ export function createIslandStore(options: IslandStoreOptions = {}) {
     running.clear();
   };
 
-  return Object.assign(store, { dispose, pendingTimers: () => [...running.keys()] });
+  /**
+   * Applies new interaction preferences (Settings › Island) immediately.
+   * Running timers whose delay changed restart; no restart needed.
+   */
+  const configure = (next: {
+    delays?: Partial<IslandDelays>;
+    behavior?: Partial<IslandBehavior>;
+  }) => {
+    delays = { ...delays, ...next.delays };
+    behavior = { ...behavior, ...next.behavior };
+    for (const { handle } of running.values()) clearTimeout(handle);
+    running.clear();
+    syncTimersFor(store.getState());
+  };
+
+  return Object.assign(store, {
+    dispose,
+    configure,
+    pendingTimers: () => [...running.keys()],
+  });
 }
 
 export type IslandStore = ReturnType<typeof createIslandStore>;

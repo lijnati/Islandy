@@ -7,6 +7,10 @@
 mod linux;
 #[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+mod windows_os;
+
+use std::path::Path;
 
 use tauri::{Runtime, WebviewWindow};
 
@@ -132,5 +136,112 @@ pub fn open_settings_uri(uri: &'static str) -> Result<()> {
         Err(crate::error::IslandyError::Unsupported(
             "Windows settings pages are only available on Windows",
         ))
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Launch at sign-in                                                          */
+/* -------------------------------------------------------------------------- */
+
+/// The registered start-up command line, if any.
+pub fn startup_command(name: &str) -> Option<String> {
+    #[cfg(windows)]
+    {
+        windows_os::startup_command(name)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux::startup_command(name)
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = name;
+        None
+    }
+}
+
+/// The user switched the entry off in Task Manager / Settings (Windows).
+pub fn startup_disabled_by_user(name: &str) -> bool {
+    #[cfg(windows)]
+    {
+        windows_os::startup_disabled_by_user(name)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        false
+    }
+}
+
+pub fn set_startup_command(name: &str, command: &str) -> Result<()> {
+    #[cfg(windows)]
+    {
+        windows_os::set_startup_command(name, command)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux::set_startup_command(name, command)
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = (name, command);
+        Err(crate::error::IslandyError::Unsupported(
+            "launch at sign-in is not supported on this platform",
+        ))
+    }
+}
+
+pub fn remove_startup_command(name: &str) -> Result<()> {
+    #[cfg(windows)]
+    {
+        windows_os::remove_startup_command(name)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux::remove_startup_command(name)
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = name;
+        Ok(())
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Misc                                                                       */
+/* -------------------------------------------------------------------------- */
+
+#[cfg(windows)]
+pub fn windows_version() -> Option<String> {
+    windows_os::windows_version()
+}
+
+/// Whether a fullscreen window covers `monitor` (Windows only).
+pub fn fullscreen_on(monitor: PhysicalRect, own: Option<isize>) -> bool {
+    #[cfg(windows)]
+    {
+        windows_os::fullscreen_on(monitor, own)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (monitor, own);
+        false
+    }
+}
+
+/// Opens one of Islandy's own folders in the file manager.
+pub fn open_folder(path: &Path) -> Result<()> {
+    #[cfg(windows)]
+    {
+        windows_os::open_folder(path)
+    }
+    #[cfg(not(windows))]
+    {
+        // Development hosts only: a fixed program with our own directory.
+        std::process::Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| crate::error::IslandyError::Platform(format!("xdg-open failed: {e}")))
     }
 }

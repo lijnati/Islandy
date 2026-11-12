@@ -35,7 +35,7 @@ export function PeekIsland({ peek }: { peek: PeekContent }) {
       onClick={() => {
         dispatchIsland({ type: "PRESS" });
       }}
-      aria-label={`${peek.source}: ${peek.title}, ${peek.detail}. Open dashboard`}
+      aria-label={`${peek.source}: ${peek.title}${peek.detail ? `, ${peek.detail}` : ""}. Open dashboard`}
       className={cx("flex h-full w-full items-center gap-3 rounded-full pr-4 pl-2", focusRing)}
     >
       {peek.artworkKey !== undefined ? (
@@ -53,7 +53,7 @@ export function PeekIsland({ peek }: { peek: PeekContent }) {
         <span className="text-caption font-medium text-fg-muted">{peek.source}</span>
         <span className="w-full truncate text-body font-semibold tracking-tight text-fg">
           {peek.title}
-          <span className="font-regular text-fg-muted"> · {peek.detail}</span>
+          {peek.detail && <span className="font-regular text-fg-muted"> · {peek.detail}</span>}
         </span>
       </span>
       {peek.artworkKey !== undefined ? (

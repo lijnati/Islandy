@@ -172,7 +172,7 @@ impl<B: AudioBackend> Worker<B> {
                 self.publish(AudioState::with_status(Availability::Unsupported));
             }
             Err(e) => {
-                eprintln!("[islandy] audio: connect failed: {e}");
+                crate::log_warn!("audio", "audio: connect failed: {e}");
                 self.fail();
             }
         }
@@ -201,7 +201,7 @@ impl<B: AudioBackend> Worker<B> {
                     list = all;
                 }
                 Err(e) => {
-                    eprintln!("[islandy] audio: enumerating devices failed: {e}");
+                    crate::log_warn!("audio", "audio: enumerating devices failed: {e}");
                     return self.fail();
                 }
             }
@@ -214,7 +214,7 @@ impl<B: AudioBackend> Worker<B> {
                 return;
             }
             Err(e) => {
-                eprintln!("[islandy] audio: reading volume failed: {e}");
+                crate::log_warn!("audio", "audio: reading volume failed: {e}");
                 return self.fail();
             }
         };

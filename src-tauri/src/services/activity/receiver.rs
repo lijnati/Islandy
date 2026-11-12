@@ -182,8 +182,9 @@ fn handle(mut stream: TcpStream, token: &str, events: &mut RateLimiter, sink: &S
         Ok(()) => "ok\n".to_owned(),
         Err(rejection) => {
             #[cfg(debug_assertions)]
-            eprintln!(
-                "[islandy] receiver rejected a message: {}",
+            crate::log_warn!(
+                "receiver",
+                "receiver rejected a message: {}",
                 rejection.code()
             );
             format!("error {}\n", rejection.code())

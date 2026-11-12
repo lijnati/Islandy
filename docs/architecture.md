@@ -193,6 +193,36 @@ The Claude Code settings editor (`claude_settings.rs`) runs only from two explic
 Details: [activity-engine.md](activity-engine.md) and
 [claude-code-integration.md](claude-code-integration.md).
 
+## Settings, lifecycle and diagnostics (Phase 5)
+
+```
+settings window (settings.html) ─┐                ┌─► island window: appearance tokens,
+island window (index.html) ──────┤ connect_settings│   interaction behavior, widget order
+                                 ▼                 │
+              SettingsService (services/settings) ─┤ push SettingsState to every window
+                normalize → settings.json (atomic) └─► app::apply_settings: IslandWindow::configure
+                                                        (monitor, anchor, offset, margin, size),
+                                                        log level, fullscreen hiding
+```
+
+- **Two pages, one bundle.** Vite builds `index.html` (island) and `settings.html` (settings
+  window). Each window has its own capability file.
+- **Settings window** (`settings_window.rs`): created on demand, destroyed when closed. It reads
+  native snapshots with `get_*` commands (polling a few seconds while a page that needs them is
+  open) and never takes over the island's push channels.
+- **Placement** (`window/geometry.rs`, `manager.rs`): `PlacementConfig` (anchor, offset, top
+  margin, monitor, size preset) → `fit_layouts` + `place` (clamped canvas) → `frame_region`
+  aligned like the CSS surface (`Layouts.align`). Alt+drag previews offsets with
+  `preview_island_offset` and saves on release.
+- **Lifecycle** (`app.rs`, `tray.rs`): single-instance plugin first; settings and the log are
+  loaded before the builder; services, shortcut, tray, startup repair, then the island; a 2 s
+  watcher re-fits the island and hides it for fullscreen apps; `RunEvent::Exit` stops everything.
+- **Shortcut** (`shortcut.rs`): `ShortcutManager` registers new-before-old and reports conflicts.
+- **Startup** (`services/startup.rs`, `platform/windows_os.rs`): per-user `Run` value.
+- **Diagnostics** (`services/diagnostics/`): bounded, sanitized log; on-demand summary.
+- **Widgets** (`src/features/widgets/registry.ts`): id, name, min width, layout; the dashboard
+  shows enabled widgets in order while they fit.
+
 ## Focus and keyboard
 
 - By default the window is non-activating (`WS_EX_NOACTIVATE`): hovering and clicking
@@ -273,6 +303,8 @@ for attention, is idle or stale).
 - [activity-engine.md](activity-engine.md), [claude-code-integration.md](claude-code-integration.md),
   [privacy.md](privacy.md): Phase 4.
 
+- [settings.md](settings.md), [installation.md](installation.md), [release.md](release.md),
+  [troubleshooting.md](troubleshooting.md): Phase 5.
 - [media.md](media.md): GSMTC integration, selection policy, events, artwork.
 - [system.md](system.md): audio, power, network, radios, metrics, brightness, settings.
 - [security.md](security.md): capabilities, CSP, and local-integration rules.

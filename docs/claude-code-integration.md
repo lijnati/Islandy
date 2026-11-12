@@ -194,6 +194,17 @@ profile. Release builds use the GUI subsystem: PowerShell doesn't wait for them 
 (`| Out-Null`), and text output appears only when redirected. Exit codes are reliable when
 waited for.
 
+## Managing the integration (Phase 5)
+
+**Settings › Integrations › Claude Code** shows the status, the settings file path, when the last
+event arrived, Install/Reinstall/Repair and Remove (with confirmation), and troubleshooting tips.
+**Developer events** shows the receiver state and a **Send test** button that sends a message
+through the real receiver with the token, exactly like `islandy notify`.
+
+**Uninstall:** the uninstaller runs `islandy.exe uninstall-cleanup`, which removes Islandy's
+hooks (only if present, with a backup, keeping every other hook) and the sign-in entry. It prints
+nothing and always exits 0. Updates don't run it.
+
 ## Troubleshooting
 
 | Symptom                              | Check                                                                                                                                              |

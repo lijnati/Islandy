@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createIslandStore,
+  defaultBehavior,
+  defaultDelays,
   desiredTimers,
   initialIslandState,
+  PINNED_IDLE_MS,
   transition,
+  type IslandBehavior,
   type IslandEvent,
   type IslandState,
   type IslandStore,
@@ -14,7 +18,7 @@ const peek = { source: "Test", title: "Hello", detail: "world", tone: "neutral" 
 const delays = { hoverMs: 150, leaveMs: 360, peekMs: 4000 };
 
 function run(events: IslandEvent[], from: IslandState = initialIslandState): IslandState {
-  return events.reduce(transition, from);
+  return events.reduce((state, event) => transition(state, event), from);
 }
 
 describe("transition (pure)", () => {
@@ -141,7 +145,12 @@ describe("transition (pure)", () => {
       peek: null,
     });
     const pinned = run([{ type: "PRESS" }]);
-    expect(desiredTimers(pinned, delays)).toEqual({ hover: null, leave: null, peek: null });
+    expect(desiredTimers(pinned, delays)).toEqual({
+      hover: null,
+      leave: null,
+      peek: null,
+      idle: null,
+    });
   });
 });
 
@@ -260,5 +269,62 @@ describe("per-peek dwell (Phase 4)", () => {
     expect(desiredTimers(s, delays).peek?.ms).toBe(8000);
     const d = transition(initialIslandState, { type: "CONTEXT_EVENT", peek });
     expect(desiredTimers(d, delays).peek?.ms).toBe(4000);
+  });
+});
+
+describe("interaction preferences", () => {
+  const behavior = (b: Partial<IslandBehavior>): IslandBehavior => ({ ...defaultBehavior, ...b });
+  const hovered = transition(initialIslandState, { type: "POINTER_ENTER" });
+
+  it("hover opens only when enabled", () => {
+    const off = behavior({ openOnHover: false });
+    expect(transition(hovered, { type: "HOVER_INTENT" }, off)).toBe(hovered);
+    expect(desiredTimers(hovered, defaultDelays, off).hover).toBeNull();
+    expect(transition(hovered, { type: "HOVER_INTENT" }).mode).toBe("expanded");
+  });
+
+  it("click opens only when enabled, pinned or not", () => {
+    expect(
+      transition(initialIslandState, { type: "PRESS" }, behavior({ openOnClick: false })),
+    ).toBe(initialIslandState);
+    const unpinned = transition(
+      initialIslandState,
+      { type: "PRESS" },
+      behavior({ pinOnClick: false }),
+    );
+    expect(unpinned).toMatchObject({ mode: "expanded", pinned: false });
+    // The shortcut always works, whatever the pointer preferences.
+    const none = behavior({ openOnClick: false, openOnHover: false });
+    expect(transition(initialIslandState, { type: "SHORTCUT" }, none).mode).toBe("expanded");
+  });
+
+  it("auto-collapse closes a pinned dashboard left alone", () => {
+    const on = behavior({ autoCollapse: true });
+    const pinned = transition(initialIslandState, { type: "PRESS" }, on);
+    expect(desiredTimers(pinned, defaultDelays, on).idle).toMatchObject({ ms: PINNED_IDLE_MS });
+    expect(transition(pinned, { type: "IDLE_TIMEOUT" }, on).mode).toBe("collapsed");
+    // Not while the pointer is on it, and not when the preference is off.
+    const hovering = transition(pinned, { type: "POINTER_ENTER" }, on);
+    expect(desiredTimers(hovering, defaultDelays, on).idle).toBeNull();
+    expect(transition(hovering, { type: "IDLE_TIMEOUT" }, on)).toBe(hovering);
+    expect(transition(pinned, { type: "IDLE_TIMEOUT" })).toBe(pinned);
+  });
+
+  it("configure applies new delays without a restart", () => {
+    vi.useFakeTimers();
+    const store = createIslandStore();
+    store.configure({ delays: { hoverMs: 400 } });
+    store.getState().dispatch({ type: "POINTER_ENTER" });
+    vi.advanceTimersByTime(300);
+    expect(store.getState().mode).toBe("collapsed");
+    vi.advanceTimersByTime(100);
+    expect(store.getState().mode).toBe("expanded");
+    store.configure({ behavior: { openOnHover: false } });
+    store.getState().dispatch({ type: "ESCAPE" });
+    store.getState().dispatch({ type: "POINTER_ENTER" });
+    vi.advanceTimersByTime(1000);
+    expect(store.getState().mode).toBe("collapsed");
+    store.dispose();
+    vi.useRealTimers();
   });
 });

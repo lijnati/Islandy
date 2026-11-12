@@ -236,12 +236,97 @@ impl SourceToggles {
     }
 }
 
+/// Which recorded events may also appear as a peek.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PeekToggles {
+    pub claude_code: bool,
+    pub developer: bool,
+    pub system: bool,
+    /// Track changes (decided in the UI; stored here with the others).
+    pub media: bool,
+    /// Successful outcomes (build passed, Claude finished, …).
+    pub success: bool,
+    /// Errors and warnings.
+    pub errors: bool,
+}
+
+impl Default for PeekToggles {
+    fn default() -> Self {
+        Self {
+            claude_code: true,
+            developer: true,
+            system: true,
+            media: true,
+            success: true,
+            errors: true,
+        }
+    }
+}
+
+impl PeekToggles {
+    pub fn source(&self, source: ActivitySource) -> bool {
+        match source {
+            ActivitySource::ClaudeCode => self.claude_code,
+            ActivitySource::Developer => self.developer,
+            ActivitySource::System => self.system,
+        }
+    }
+}
+
+/// Scales every peek's dwell time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PeekDuration {
+    Short,
+    #[default]
+    Standard,
+    Long,
+}
+
+impl PeekDuration {
+    pub fn scale(self, dwell_ms: u32) -> u32 {
+        match self {
+            Self::Short => dwell_ms * 3 / 4,
+            Self::Standard => dwell_ms,
+            Self::Long => dwell_ms * 3 / 2,
+        }
+    }
+}
+
+pub const RETENTION_DAYS_RANGE: (u8, u8) = (1, 30);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ActivitySettings {
     /// Islandy's own quiet mode (not Windows Do Not Disturb).
     pub quiet: bool,
+    /// Sources Islandy records at all.
     pub sources: SourceToggles,
+    pub peeks: PeekToggles,
+    pub peek_duration: PeekDuration,
+    /// History is kept this many days (and at most `MAX_EVENTS` events).
+    pub retention_days: u8,
+}
+
+impl Default for ActivitySettings {
+    fn default() -> Self {
+        Self {
+            quiet: false,
+            sources: SourceToggles::default(),
+            peeks: PeekToggles::default(),
+            peek_duration: PeekDuration::default(),
+            retention_days: 7,
+        }
+    }
+}
+
+impl ActivitySettings {
+    pub fn normalized(mut self) -> Self {
+        let (lo, hi) = RETENTION_DAYS_RANGE;
+        self.retention_days = self.retention_days.clamp(lo, hi);
+        self
+    }
 }
 
 /// The local receiver's state, for troubleshooting in the UI.
@@ -266,6 +351,16 @@ pub struct ActivitySnapshot {
     pub receiver: ReceiverStatus,
     /// History couldn't be read or written; it's kept in memory only.
     pub history_error: bool,
+    /// When each source last delivered anything (including events that
+    /// aren't recorded, such as tool use), for troubleshooting.
+    pub last_received: LastReceived,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastReceived {
+    pub claude_code: Option<u64>,
+    pub developer: Option<u64>,
 }
 
 /// A request to show an event as a peek. Never replayed on reconnect.
@@ -338,11 +433,27 @@ mod tests {
                 settings: ActivitySettings::default(),
                 receiver: ReceiverStatus::Listening,
                 history_error: false,
+                last_received: LastReceived::default(),
             },
         })
         .unwrap();
         assert_eq!(json["type"], "snapshot");
         assert_eq!(json["snapshot"]["settings"]["sources"]["claudeCode"], true);
         assert_eq!(json["snapshot"]["receiver"], "listening");
+        assert_eq!(json["snapshot"]["settings"]["retentionDays"], 7);
+        assert_eq!(json["snapshot"]["settings"]["peekDuration"], "standard");
+        assert_eq!(json["snapshot"]["settings"]["peeks"]["media"], true);
+    }
+
+    #[test]
+    fn older_settings_files_gain_the_new_fields() {
+        let s: ActivitySettings =
+            serde_json::from_value(serde_json::json!({ "quiet": true })).unwrap();
+        assert!(s.quiet);
+        assert_eq!(s.retention_days, 7);
+        assert_eq!(s.peeks, PeekToggles::default());
+        let s: ActivitySettings =
+            serde_json::from_value(serde_json::json!({ "retentionDays": 200 })).unwrap();
+        assert_eq!(s.normalized().retention_days, 30);
     }
 }

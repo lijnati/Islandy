@@ -113,7 +113,7 @@ fn publish_result(hub: &SystemHub, result: Result<DisplayState, SystemError>) {
         Ok(state) => state,
         Err(SystemError::Unsupported) => DisplayState::with_status(Availability::Unsupported),
         Err(e) => {
-            eprintln!("[islandy] display: {e}");
+            crate::log_warn!("display", "display: {e}");
             DisplayState::with_status(Availability::Unavailable)
         }
     };

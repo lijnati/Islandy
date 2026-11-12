@@ -31,6 +31,10 @@
     "allow-set-activity-source",
     "allow-get-claude-integration",
     "allow-install-claude-integration",
-    "allow-remove-claude-integration"
+    "allow-remove-claude-integration",
+    "allow-connect-settings",
+    "allow-update-settings",
+    "allow-preview-island-offset",
+    "allow-open-settings-window"
   ]
 }

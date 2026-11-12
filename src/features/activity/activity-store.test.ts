@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_ACTIVITY_SETTINGS } from "../settings/defaults";
 
 import { NativeError } from "../../services/native";
 import type { ActivitySnapshot, ActivityUpdate, ClaudeIntegration } from "../../services/types";
@@ -119,7 +120,7 @@ describe("commands are not optimistic", () => {
       type: "snapshot",
       snapshot: snapshot({
         revision: 2,
-        settings: { quiet: true, sources: { claudeCode: true, developer: true, system: true } },
+        settings: { ...DEFAULT_ACTIVITY_SETTINGS, quiet: true },
       }),
     });
     expect(store.getState().pending.quiet).toBeUndefined();

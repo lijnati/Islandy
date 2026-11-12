@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-island-visible"
+description = "Enables the set_island_visible command without any pre-configured scope."
+commands.allow = ["set_island_visible"]
+
+[[permission]]
+identifier = "deny-set-island-visible"
+description = "Denies the set_island_visible command without any pre-configured scope."
+commands.deny = ["set_island_visible"]

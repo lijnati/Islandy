@@ -1,9 +1,17 @@
 import { AnimatePresence, motion as m, type Transition } from "motion/react";
+
 import { motion, radius } from "../../design/tokens";
+import {
+  PANEL_RADIUS,
+  useApplyAppearance,
+  useMotionProfile,
+  type MotionProfile,
+} from "../../features/settings/appearance";
+import { useSettings } from "../../features/settings/settings-store";
+import { useLayouts } from "../../features/island/layouts";
 import { dispatchIsland, useIsland, type IslandMode } from "../../features/island/island-store";
 import { useIslandFrame } from "../../features/island/useIslandFrame";
 import { useNativeBridge } from "../../features/island/useNativeBridge";
-import { usePrefersReducedMotion } from "../../hooks/usePrefersReducedMotion";
 import { NowProvider } from "./NowProvider";
 import { cx } from "../ui/cx";
 import { CollapsedIsland } from "./CollapsedIsland";
@@ -12,11 +20,13 @@ import { PeekIsland } from "./PeekIsland";
 
 const isDashboard = (mode: IslandMode) => mode === "expanded" || mode === "focused";
 
-function surfaceTransition(from: IslandMode, to: IslandMode): Transition {
-  if (isDashboard(to)) return motion.expand;
-  if (isDashboard(from)) return motion.collapse;
-  return motion.peek;
+function surfaceTransition(from: IslandMode, to: IslandMode, profile: MotionProfile): Transition {
+  if (isDashboard(to)) return profile.expand;
+  if (isDashboard(from)) return profile.collapse;
+  return profile.peek;
 }
+
+const JUSTIFY = { start: "justify-start", center: "justify-center", end: "justify-end" } as const;
 
 /**
  * The island: one animated surface centered at the top of the window.
@@ -28,21 +38,25 @@ function surfaceTransition(from: IslandMode, to: IslandMode): Transition {
  */
 export function IslandRoot() {
   useNativeBridge();
+  useApplyAppearance();
   const { mode, from, size, onAnimationComplete } = useIslandFrame();
   const hovering = useIsland((s) => s.hovering);
   const peek = useIsland((s) => s.peek);
   const peekSeq = useIsland((s) => s.peekSeq);
-  const reduce = usePrefersReducedMotion();
+  const profile = useMotionProfile();
+  const reduce = profile.reduce;
+  const corners = useSettings((s) => s.appearance.corners);
+  const align = useLayouts().align ?? "center";
 
-  const transition = reduce ? { duration: 0 } : surfaceTransition(from, mode);
+  const transition = surfaceTransition(from, mode, profile);
 
   const dashboard = isDashboard(mode);
-  const borderRadius = dashboard ? radius.panel : radius.pill(size.height);
+  const borderRadius = dashboard ? PANEL_RADIUS[corners] : radius.pill(size.height);
   const viewKey = dashboard ? "dashboard" : mode === "peek" ? `peek-${peekSeq}` : "collapsed";
 
   return (
     <NowProvider>
-      <div className="flex h-full w-full justify-center">
+      <div className={cx("flex h-full w-full", JUSTIFY[align])}>
         <m.div
           data-mode={mode}
           initial={false}
@@ -57,7 +71,9 @@ export function IslandRoot() {
           }}
           className={cx(
             "relative shrink-0 overflow-hidden border bg-surface shadow-surface transition-colors duration-fast",
-            hovering && !dashboard ? "border-hairline-strong bg-[#0e0e0e]" : "border-hairline",
+            hovering && !dashboard
+              ? "border-hairline-strong bg-surface-pill-hover"
+              : "border-hairline",
           )}
           style={{ width: size.width, height: size.height, borderRadius }}
         >

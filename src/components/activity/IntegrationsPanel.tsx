@@ -24,7 +24,7 @@ const button = (primary = false) =>
     "inline-flex h-7 shrink-0 items-center rounded-full px-3 text-caption font-medium transition-colors duration-fast ease-standard disabled:cursor-not-allowed disabled:opacity-50",
     focusRing,
     primary
-      ? "bg-fg text-surface hover:bg-fg/90"
+      ? "bg-accent text-on-accent hover:bg-accent/90"
       : "border border-hairline text-fg-muted hover:bg-surface-hover hover:text-fg",
   );
 

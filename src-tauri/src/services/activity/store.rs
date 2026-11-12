@@ -144,6 +144,9 @@ mod tests {
                 developer: false,
                 ..Default::default()
             },
+            peek_duration: crate::services::activity::model::PeekDuration::Long,
+            retention_days: 14,
+            ..Default::default()
         };
         let events = [event("a1"), event("a2")];
         save(&dir, &settings, events.iter()).unwrap();

@@ -7,6 +7,7 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 
 import type {
+  ActivitySettings,
   ActivitySnapshot,
   ActivitySource,
   ActivityUpdate,
@@ -15,13 +16,22 @@ import type {
   IslandConnection,
   IslandLayouts,
   IslandSignal,
+  IslandyFolder,
   MediaAction,
   MediaSnapshot,
+  MonitorInfo,
   NativeErrorKind,
   NativeErrorPayload,
   RadioKind,
+  Settings,
   SettingsPage,
+  SettingsPageId,
+  SettingsPush,
+  SettingsState,
+  ShortcutStatus,
   Size,
+  StartupStatus,
+  StorageInfo,
   SystemFocus,
   SystemSnapshot,
   SystemUpdate,
@@ -242,6 +252,11 @@ export function connectActivity(
   return call<ActivitySnapshot>("connect_activity", { channel });
 }
 
+/** The current activity snapshot (the settings window reads; it doesn't subscribe). */
+export function getActivitySnapshot(): Promise<ActivitySnapshot> {
+  return call<ActivitySnapshot>("get_activity_snapshot");
+}
+
 /** Dismisses an active event, or removes a finished one from history. */
 export function dismissActivity(id: string): Promise<void> {
   return call<undefined>("dismiss_activity", { id });
@@ -273,4 +288,92 @@ export function installClaudeIntegration(): Promise<ClaudeIntegration> {
 /** Removes Islandy's hooks, and nothing else. */
 export function removeClaudeIntegration(): Promise<ClaudeIntegration> {
   return call<ClaudeIntegration>("remove_claude_integration");
+}
+
+/** All activity settings at once (normalized in Rust). */
+export function setActivitySettings(settings: ActivitySettings): Promise<void> {
+  return call<undefined>("set_activity_settings", { settings });
+}
+
+/** Sends a harmless test message through the real local receiver. */
+export function testLocalReceiver(): Promise<void> {
+  return call<undefined>("test_local_receiver");
+}
+
+/* ------------------------------------------------------------------------ */
+/* Settings, startup, diagnostics                                             */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Registers this window's settings channel and returns the current state.
+ * Every window (island, settings) receives every change.
+ */
+export function connectSettings(onPush: (push: SettingsPush) => void): Promise<SettingsState> {
+  if (!isTauri()) {
+    return Promise.reject(
+      new NativeError(
+        "connect_settings",
+        "unavailable",
+        "not running inside the Islandy desktop shell",
+      ),
+    );
+  }
+  const channel = new Channel<SettingsPush>();
+  channel.onmessage = onPush;
+  return call<SettingsState>("connect_settings", { channel });
+}
+
+export function updateSettings(next: Settings): Promise<SettingsState> {
+  return call<SettingsState>("update_settings", { next });
+}
+
+export function resetSettings(): Promise<SettingsState> {
+  return call<SettingsState>("reset_settings");
+}
+
+/** Registers a new toggle shortcut; the old one stays active on failure. */
+export function setToggleShortcut(accelerator: string): Promise<ShortcutStatus> {
+  return call<ShortcutStatus>("set_toggle_shortcut", { accelerator });
+}
+
+export function getShortcutStatus(): Promise<ShortcutStatus> {
+  return call<ShortcutStatus>("get_shortcut_status");
+}
+
+export function getStartupStatus(): Promise<StartupStatus> {
+  return call<StartupStatus>("get_startup_status");
+}
+
+export function setLaunchAtLogin(enabled: boolean): Promise<StartupStatus> {
+  return call<StartupStatus>("set_launch_at_login", { enabled });
+}
+
+export function listMonitors(): Promise<MonitorInfo[]> {
+  return call<MonitorInfo[]>("list_monitors");
+}
+
+/** Live offset while dragging; `null` ends the preview. Returns the applied offset. */
+export function previewIslandOffset(offset: number | null): Promise<number> {
+  return call<number>("preview_island_offset", { offset });
+}
+
+export function setIslandVisible(visible: boolean): Promise<void> {
+  return call<undefined>("set_island_visible", { visible });
+}
+
+export function openSettingsWindow(page?: SettingsPageId): Promise<void> {
+  return call<undefined>("open_settings_window", { page: page ?? null });
+}
+
+export function openIslandyFolder(folder: IslandyFolder): Promise<void> {
+  return call<undefined>("open_islandy_folder", { folder });
+}
+
+export function getStorageInfo(): Promise<StorageInfo> {
+  return call<StorageInfo>("get_storage_info");
+}
+
+/** Plain-text diagnostics summary (no user activity, no secrets). */
+export function getDiagnostics(): Promise<string> {
+  return call<string>("get_diagnostics");
 }

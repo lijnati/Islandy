@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_ACTIVITY_SETTINGS } from "../../features/settings/defaults";
 
 import { activityStore, initialActivityState } from "../../features/activity/activity-store";
 import { event, session, snapshot, T0 } from "../../features/activity/activity-test-utils";
@@ -68,7 +69,7 @@ describe("collapsed pill", () => {
   it("marks quiet mode", () => {
     load(
       snapshot({
-        settings: { quiet: true, sources: { claudeCode: true, developer: true, system: true } },
+        settings: { ...DEFAULT_ACTIVITY_SETTINGS, quiet: true },
       }),
     );
     render(<CollapsedIsland />);

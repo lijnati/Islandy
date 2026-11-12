@@ -1,15 +1,27 @@
 # Islandy
 
-A lightweight, context-aware floating island for Windows 10/11.
+A beautiful, context-aware Dynamic Island for Windows 10/11.
 
-Islandy sits at the top center of the desktop as a compact black pill and, in later phases,
-expands into a small dashboard for music, time, calendar, system status and developer activity.
+Islandy sits at the top of the desktop as a compact pill and expands into a small dashboard for
+music, time, calendar, system status and developer activity (Claude Code, builds, tests).
 It is built to feel like a native OS component: no taskbar entry, no focus stealing, near-zero
 idle cost, fully local.
 
 ## Status
 
-**Phase 4: Smart activity engine and Claude Code integration.** What exists today:
+**v0.1.0 release candidate (Phase 5: personalization, polish, Windows release).**
+Install and use: [docs/installation.md](docs/installation.md). Settings:
+[docs/settings.md](docs/settings.md). Help: [docs/troubleshooting.md](docs/troubleshooting.md).
+Release process and status: [docs/release.md](docs/release.md).
+
+- **Phase 5:** a separate settings window (General, Appearance, Island, Widgets,
+  Integrations, Notifications, Privacy, About); themes, accents, opacity, corners, motion;
+  monitor/alignment/offset/size; widget order; pointer behavior; configurable shortcut; launch
+  at startup; tray menu (show/hide, settings, quiet mode, startup, about, quit); single instance;
+  fullscreen auto-hide; notification preferences with per-source rate limiting; local logs and a
+  diagnostic summary; per-user NSIS installer that cleans up on uninstall.
+
+Earlier phases:
 
 - A black pill at the top center of the primary monitor (time, ambient glyph, media
   indicator) that expands with a spring animation into an ~820 × 248 dashboard on hover
@@ -23,7 +35,7 @@ idle cost, fully local.
   several apps play; the collapsed pill shows the artwork and a playback indicator, and a new
   track shows a brief peek. See [docs/media.md](docs/media.md).
 - Interaction: hover-to-expand, delayed leave-collapse, click-to-pin, Escape, click outside
-  (focus loss), peeks for contextual events (tray → _Preview peek (demo)_).
+  (focus loss), peeks for contextual events.
 - Native frame coordination: the window is a fixed canvas and a window region limits drawing
   and clicks to the visible island, so nothing invisible blocks the desktop. Layouts are fitted
   to the monitor (DPI-aware, narrower on small screens).
@@ -59,7 +71,7 @@ idle cost, fully local.
     [docs/claude-code-integration.md](docs/claude-code-integration.md) and
     [docs/privacy.md](docs/privacy.md).
 
-Not built yet: Islandy's own settings, autostart, single instance, fullscreen handling,
+Not built: automatic updates and code signing (no infrastructure yet), quiet-mode scheduling,
 switching the default audio output (no documented Windows API). See [docs/roadmap.md](docs/roadmap.md).
 
 > **Verification note.** Islandy was developed on a Linux host. The Windows code paths compile
@@ -71,8 +83,9 @@ switching the default audio output (no documented Windows API). See [docs/roadma
 > network, radios, brightness**, and **all Phase 4 Windows paths: hook execution under Git
 > Bash/PowerShell, the loopback receiver and firewall, `%LOCALAPPDATA%` files**) has **not**
 > been verified on a Windows machine. The Phase 4 pipeline _was_ verified end to end on Linux
-> with the real Claude Code 2.1.322 (see docs/claude-code-integration.md → Verification). See
-> the checklist below.
+> with the real Claude Code 2.1.322 (see docs/claude-code-integration.md → Verification). Phase 5
+> was verified in the real app on Linux and the Windows installer/uninstaller under Wine (no
+> WebView2 there, so the app itself was not run). See the checklist below.
 
 ## Tech stack
 
@@ -118,14 +131,12 @@ pnpm dev            # frontend only, in a browser (IPC calls fail gracefully)
 In the browser dev server, `window.__islandy.dispatch({ type: "CONTEXT_EVENT", peek: … })`
 drives the state machine (dev builds only), e.g. to preview a peek.
 
-### Configuration (environment variables, until a settings UI exists)
+### Configuration
 
-| Variable                  | Default          | Effect                                                |
-| ------------------------- | ---------------- | ----------------------------------------------------- |
-| `ISLANDY_TOGGLE_SHORTCUT` | `Ctrl+Alt+Space` | Global toggle shortcut (e.g. `Ctrl+Shift+I`)          |
-| `ISLANDY_FRAME_STRATEGY`  | `region`         | `resize` resizes the window instead of using a region |
-
-The top offset (8 px) is `TOP_MARGIN` in `src-tauri/src/window/geometry.rs`.
+Everything is in the settings window ([docs/settings.md](docs/settings.md)). One diagnostic
+environment variable remains: `ISLANDY_FRAME_STRATEGY=resize` resizes the window instead of using
+a region. (`ISLANDY_TOGGLE_SHORTCUT` is no longer read.) The settings window can also be previewed
+in a browser at `http://localhost:1420/settings.html` with `pnpm dev`.
 
 ## Check
 
@@ -144,10 +155,11 @@ pnpm check          # all of the above
 ```sh
 pnpm build          # typecheck + production frontend bundle (dist/)
 pnpm tauri build    # release binary + NSIS installer (per-user, no admin) on Windows
+pnpm tauri build --target x86_64-pc-windows-gnu   # cross-build from Linux (MinGW + NSIS)
 ```
 
 The release binary is at `src-tauri/target/release/islandy.exe`, the installer under
-`src-tauri/target/release/bundle/nsis/`.
+`src-tauri/target/release/bundle/nsis/`. See [docs/release.md](docs/release.md).
 
 ## Project layout
 
@@ -168,23 +180,30 @@ src/                      React frontend
   features/system/        system store (per-domain updates, slider coalescing, alerts) +
                           pure model
   features/activity/      activity store (snapshots, peeks, integration), pure model,
-                          presentation coordinator (peek priority/queue), tray demo peek
+                          presentation coordinator (peek priority/queue)
+  features/settings/      settings schema/defaults/store, appearance, settings window
+                          (components/ + pages/), shortcut recorder
+  features/widgets/       widget registry (ids, names, layout needs)
   hooks/                  useClock (minute-aligned), useNow, usePrefersReducedMotion
   services/               native.ts: the only module that calls Rust; types.ts: IPC types
   design/, styles/        design tokens (CSS @theme + small TS mirror)
 src-tauri/                Rust backend
-  src/app.rs              lifecycle: builder, setup, tray, window events, shutdown
+  src/app.rs              lifecycle: single instance, setup, watcher, window events, shutdown
+  src/tray.rs             tray icon and menu
+  src/settings_window.rs  the settings window
   src/window/             geometry.rs (pure, tested) + manager.rs (IslandWindow, frame)
   src/platform/           isolated OS code: windows.rs (Win32), linux.rs (dev host)
   src/commands.rs         IPC surface
   src/cli.rs              `islandy hook` (Claude Code bridge), `notify`, `status`
   src/signals.rs          Rust → UI channel
-  src/shortcut.rs         global toggle shortcut
+  src/shortcut.rs         configurable global shortcut (validation, safe re-registration)
   src/services/           app_info.rs, winrt.rs (shared WinRT helpers), media/ (GSMTC
                           worker, see docs/media.md), system/ (audio, power, network,
                           radios, metrics, brightness, settings; see docs/system.md),
                           activity/ (engine, receiver, protocol, store, claude_settings;
-                          see docs/activity-engine.md), paths.rs (per-user data dir)
+                          see docs/activity-engine.md), paths.rs (per-user data dir),
+                          settings/ (models, storage), startup.rs, diagnostics/ (log, summary)
+  windows/hooks.nsh       NSIS uninstall cleanup
   src/error.rs            serializable error type
   capabilities/           least-privilege permissions
 docs/                     product, architecture, media, system, activity engine, Claude Code
@@ -199,11 +218,12 @@ docs/                     product, architecture, media, system, activity engine,
 | Bundle identifier | `com.islandy.desktop`  | `src-tauri/tauri.conf.json` `identifier`       |
 | Publisher/authors | `Islandy contributors` | `src-tauri/Cargo.toml`                         |
 | License           | `UNLICENSED`           | `src-tauri/Cargo.toml`                         |
-| App icon          | placeholder pill mark  | `src-tauri/icons/icon.svg` → `pnpm tauri icon` |
+| App icon          | Islandy pill mark      | `src-tauri/icons/icon.svg` → `pnpm tauri icon` |
+| Publisher         | `Islandy`              | `tauri.conf.json` `bundle.publisher`           |
 
-The identifier determines the app-data directory and Windows installer registry keys; changing it
-after release orphans user data, so finalize it before the first public build. Code signing is
-not configured.
+The identifier determines the app-data directory; changing it after release orphans user data,
+so finalize it before the first public build. These values are temporary release metadata for
+the 0.1.0 RC. Code signing is not configured (see docs/release.md).
 
 ## Windows verification checklist
 
@@ -247,7 +267,7 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
 - [ ] Quick controls open their panels in place; pressing the open one closes it. The
       Settings button opens Windows Settings and the island collapses.
 - [ ] Opening a widget (click its title) shows the detail view; Back and Escape return.
-- [ ] Tray → **Preview peek (demo)** shows a peek that disappears after ~4 s.
+- [ ] Settings › Integrations › Developer events › **Send test** shows a peek that disappears after a few seconds.
 
 **Media (Phase 2)** — record app name and version for each; if an app lacks a capability
 (e.g. no seeking), note it as the app's limitation, not an Islandy failure.
@@ -297,7 +317,7 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
       **Activity (Phase 4)**. Note the Claude Code version and the shell hooks run under (Git
       Bash or PowerShell).
 
-- [ ] Integrations → Claude Code → Enable → Add hooks: `~/.claude/settings.json` gains
+- [ ] Settings › Integrations → Claude Code → Install hooks (or the dashboard's Integrations panel): `~/.claude/settings.json` gains
       Islandy's 12 handlers, other hooks are untouched, a `settings.islandy-backup-*.json`
       appears. Remove hooks restores the previous content.
 - [ ] A new interactive Claude Code session: the pill shows "<project> · Working" during a
@@ -314,6 +334,34 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
 - [ ] With Windows _Animation effects_ turned off, transitions are instant.
 - [ ] The clock and calendar are correct and roll over at the minute and midnight, including
       after sleep/resume.
+
+**Personalization and release (Phase 5).** Test on Windows 11 and Windows 10.
+
+- [ ] Install the NSIS installer without admin rights; Start menu entry; first launch shows the
+      hint peek once; WebView2 bootstrapper works on a machine without WebView2.
+- [ ] Settings window: opens from the tray, the toolbar gear and a second launch (no second
+      island or tray icon); dark title bar; no white flash; keyboard navigation with Tab.
+- [ ] Themes, accent, opacity, corners and motion apply to the island immediately.
+- [ ] Display selection on a multi-monitor setup (primary not leftmost, mixed 100/150 %);
+      top left/center/right; offset; top margin; size presets; Alt+drag; positions survive restart;
+      unplug the selected monitor (island moves to primary) and plug it back.
+- [ ] Widgets: reorder, hide all (empty state), restore defaults; System and Sound widgets show
+      real data.
+- [ ] Shortcut: change to another combination; a combination owned by another app is refused with
+      a message and the old one still works.
+- [ ] Launch at startup: on → sign out/in → Islandy starts (hidden with "Start hidden"); Task
+      Manager › Startup apps shows Islandy; disabling it there is reflected in Settings.
+- [ ] Tray: left click opens the dashboard; right-click menu items work; Hide/Show; Quit leaves
+      no `islandy.exe`/`msedgewebview2.exe`; Explorer restart (Task Manager) brings the icon back.
+- [ ] Fullscreen: a borderless fullscreen video/game hides the island on that monitor and it returns
+      afterwards; maximized windows don't hide it; taskbar auto-hide doesn't break placement.
+- [ ] Sleep/resume and lock/unlock: the island is placed correctly and the clock is right.
+- [ ] Notifications: each switch, duration, quiet mode; a burst of `islandy notify` messages peeks
+      at most 4 times a minute.
+- [ ] Privacy: clear history, retention, open folders, copy diagnostics (check its content).
+- [ ] Update: install the same/newer installer over it; settings, history, startup and hooks kept.
+- [ ] Uninstall: startup entry and Islandy's Claude Code hooks are removed (other hooks kept),
+      optional data deletion works, nothing left running.
 
 ## Known limitations
 
@@ -332,8 +380,7 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
   the process exits. Opening the right terminal isn't possible, because no verified target is
   available. See [docs/claude-code-integration.md](docs/claude-code-integration.md).
 - **Local receiver:** loopback TCP with a token, instead of the named pipe that earlier docs
-  proposed (trade-offs in docs/claude-code-integration.md). A second Islandy instance takes
-  over the receiver.
+  proposed (trade-offs in docs/claude-code-integration.md).
 - **Media** shows only what each app publishes through Windows media sessions; see
   [docs/media.md](docs/media.md) for media-specific limitations.
 - **System:**
@@ -344,12 +391,16 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
   - Radio switches depend on Windows granting access.
   - See [docs/system.md](docs/system.md).
 - **12/24-hour format** follows the WebView language, not a custom Windows regional format.
-- **Display changes:** the island re-fits on the next interaction and on DPI changes; a
-  resolution or taskbar change does not move the resting pill immediately.
+- **Display changes:** detected by a 2 s watcher (no native event), so the pill can take up to
+  2 s to move after a resolution, taskbar or monitor change.
 - **`WS_EX_TOOLWINDOW` is fragile:** Tauri/tao rewrites extended styles when its own window flags
   change; `IslandWindow` re-applies it (see `src-tauri/src/platform/windows.rs`).
-- **Configuration** is by environment variable only (no settings UI).
-- **Single instance:** launching twice shows two islands (planned with autostart).
-- **Fullscreen apps:** the island stays on top of them; see `docs/windows-integration.md`.
+- **Fullscreen detection** polls every 2 s (cheap Win32 calls) and compares the foreground window
+  with the island's monitor; see `docs/windows-integration.md`.
+- **Frost** uses translucency without blurring the desktop (no native acrylic).
+- **Unsigned, no auto-update:** SmartScreen warns; updates are manual (docs/release.md).
+- **Windows session end** terminates Islandy without its shutdown path; the last ~1.5 s of activity
+  history may be lost.
+- **Idle memory on Windows** is unmeasured; the WebView is the dominant cost.
 - **Linux** is a development host only; transparency there needs a compositor, and only the
   input region is applied.

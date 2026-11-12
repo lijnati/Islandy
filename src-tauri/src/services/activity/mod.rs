@@ -39,7 +39,7 @@ use std::{
 
 use self::{
     engine::{ActivityEngine, Input, Outcome},
-    model::{ActivitySnapshot, ActivitySource, ActivityUpdate, ReceiverStatus},
+    model::{ActivitySettings, ActivitySnapshot, ActivitySource, ActivityUpdate, ReceiverStatus},
     protocol::{Rejection, WireEvent},
     receiver::Receiver,
 };
@@ -64,6 +64,7 @@ pub enum ActivityCommand {
     ClearHistory,
     SetQuiet(bool),
     SetSource(ActivitySource, bool),
+    SetSettings(ActivitySettings),
 }
 
 enum Message {
@@ -125,7 +126,10 @@ impl ActivityService {
         let mut engine = ActivityEngine::new(loaded.settings, now);
         engine.restore(loaded.events, now);
         if loaded.recovered {
-            eprintln!("[islandy] activity history was unreadable; started a new one");
+            crate::log_warn!(
+                "activity",
+                "activity history was unreadable; started a new one"
+            );
         }
         let initial = engine.snapshot(1, ReceiverStatus::Starting, dir.is_none());
         let hub = Arc::new(SharedHub(Mutex::new(Hub {
@@ -169,7 +173,7 @@ impl ActivityService {
                 ReceiverStatus::Listening
             }
             Some(Err(e)) => {
-                eprintln!("[islandy] activity receiver unavailable: {e}");
+                crate::log_warn!("activity", "activity receiver unavailable: {e}");
                 ReceiverStatus::Unavailable
             }
             None => ReceiverStatus::Unavailable,
@@ -234,12 +238,16 @@ impl ActivityService {
 #[cfg(debug_assertions)]
 fn log_input(input: &Input) {
     match input {
-        Input::Claude(e) => eprintln!(
-            "[islandy] activity: claude {:?} {} tool={:?} notification={:?}",
-            e.event, e.session, e.tool, e.notification
+        Input::Claude(e) => crate::log_debug!(
+            "activity",
+            "activity: claude {:?} {} tool={:?} notification={:?}",
+            e.event,
+            e.session,
+            e.tool,
+            e.notification
         ),
-        Input::Developer(e) => eprintln!("[islandy] activity: developer {:?}", e.event),
-        Input::System(_) => eprintln!("[islandy] activity: system alert"),
+        Input::Developer(e) => crate::log_warn!("activity", "activity: developer {:?}", e.event),
+        Input::System(_) => crate::log_warn!("activity", "activity: system alert"),
     }
 }
 
@@ -300,6 +308,9 @@ impl Worker {
                         }
                         ActivityCommand::SetQuiet(q) => self.engine.set_quiet(q),
                         ActivityCommand::SetSource(s, on) => self.engine.set_source(s, on),
+                        ActivityCommand::SetSettings(settings) => {
+                            self.engine.apply_settings(settings, now_ms())
+                        }
                     };
                     // User actions are reflected immediately.
                     self.apply(outcome, true);

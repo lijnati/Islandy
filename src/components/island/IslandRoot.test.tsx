@@ -176,3 +176,47 @@ describe("IslandRoot (browser mode, no native shell)", () => {
     expect(screen.getByRole("progressbar", { name: "Playback position" })).toBeDefined();
   });
 });
+
+describe("dashboard widgets follow the settings", () => {
+  it("shows enabled widgets in the chosen order", async () => {
+    const { settingsStore } = await import("../../features/settings/settings-store");
+    const { DEFAULT_SETTINGS } = await import("../../features/settings/defaults");
+    act(() => {
+      void settingsStore.getState().update((s) => ({
+        ...s,
+        widgets: {
+          items: [
+            { id: "calendar", enabled: true },
+            { id: "audio", enabled: true },
+            { id: "media", enabled: false },
+            { id: "activity", enabled: false },
+            { id: "system", enabled: true },
+          ],
+        },
+      }));
+    });
+    render(<IslandRoot />);
+    act(() => {
+      dispatchIsland({ type: "SHORTCUT" });
+    });
+    await settle();
+    const titles = screen
+      .getAllByRole("region")
+      .map((r) => r.getAttribute("aria-labelledby"))
+      .map((id) => (id ? document.getElementById(id)?.textContent : null))
+      .filter((t): t is string => Boolean(t));
+    // Calendar (labelled by its month), then Sound, then System; nothing else.
+    expect(titles).toHaveLength(3);
+    expect(titles.slice(1)).toEqual(["Sound", "System"]);
+    act(() => {
+      void settingsStore.getState().update((s) => ({
+        ...s,
+        widgets: { items: s.widgets.items.map((w) => ({ ...w, enabled: false })) },
+      }));
+    });
+    expect(screen.getByText("No widgets are turned on.")).toBeTruthy();
+    act(() => {
+      void settingsStore.getState().update(() => DEFAULT_SETTINGS);
+    });
+  });
+});

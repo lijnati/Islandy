@@ -56,7 +56,7 @@
     "active": true,
     "targets": ["nsis"],
     "category": "Utility",
-    "shortDescription": "A floating island for Windows",
+    "shortDescription": "A beautiful, context-aware Dynamic Island for Windows.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -66,11 +66,19 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerHooks": "windows/hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "startMenuFolder": "Islandy",
+        "languages": ["English"],
+        "compression": "lzma"
       },
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
       }
-    }
+    },
+    "longDescription": "Islandy is a floating island at the top of your screen that shows media, system status and developer activity such as Claude Code sessions. Everything stays on your PC: no account, no cloud, no telemetry.",
+    "publisher": "Islandy",
+    "copyright": "© 2026 Islandy contributors"
   }
 }

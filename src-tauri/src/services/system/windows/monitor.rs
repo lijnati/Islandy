@@ -121,7 +121,7 @@ impl WinMonitor {
         for (result, remove) in registrations {
             match result {
                 Ok(token) => self.tokens.push((remove, token)),
-                Err(e) => eprintln!("[islandy] power events unavailable: {e}"),
+                Err(e) => crate::log_warn!("system", "power events unavailable: {e}"),
             }
         }
     }
@@ -136,7 +136,7 @@ impl WinMonitor {
             Ok(token) => self
                 .tokens
                 .push((NetworkInformation::RemoveNetworkStatusChanged, token)),
-            Err(e) => eprintln!("[islandy] network events unavailable: {e}"),
+            Err(e) => crate::log_warn!("system", "network events unavailable: {e}"),
         }
     }
 

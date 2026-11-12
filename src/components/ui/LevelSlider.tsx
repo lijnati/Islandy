@@ -103,7 +103,7 @@ export function LevelSlider({
         <div
           className={cx(
             "absolute inset-y-0 left-0 rounded-full",
-            inactive ? "bg-fg-subtle" : muted ? "bg-fg-muted" : "bg-fg",
+            inactive ? "bg-fg-subtle" : muted ? "bg-fg-muted" : "bg-accent",
             !dragging && "transition-[width] duration-base ease-standard",
           )}
           style={{ width: `${shown}%` }}

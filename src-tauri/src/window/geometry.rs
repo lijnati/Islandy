@@ -6,6 +6,8 @@
 
 use serde::Serialize;
 
+use crate::services::settings::models::{Anchor, SizePreset};
+
 /// A size in logical (DPI-independent) pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct LogicalSize {
@@ -40,7 +42,8 @@ impl LogicalSize {
 pub mod size {
     use super::LogicalSize;
 
-    /// Resting pill. Keep in sync with the initial size in `tauri.conf.json`.
+    /// Resting pill (standard preset). Keep in sync with the initial size in
+    /// `tauri.conf.json`.
     pub const COLLAPSED: LogicalSize = LogicalSize::new(220.0, 44.0);
     /// The resting pill while ambient activity is shown (e.g. a Claude Code
     /// session working or waiting): wide enough for "project · status".
@@ -51,20 +54,74 @@ pub mod size {
     pub const EXPANDED: LogicalSize = LogicalSize::new(820.0, 248.0);
 }
 
-/// Gap between the top of the monitor's work area and the island, in logical px.
-/// This is the single place to change the island's top offset (0–8 px suits the design).
+/// The pill sizes of one size preset (the dashboard keeps its size).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PillSizes {
+    pub collapsed: LogicalSize,
+    pub ambient: LogicalSize,
+    pub peek: LogicalSize,
+}
+
+impl PillSizes {
+    pub fn for_preset(preset: SizePreset) -> Self {
+        let s = |w, h| LogicalSize::new(w, h);
+        match preset {
+            SizePreset::Compact => Self {
+                collapsed: s(200.0, 40.0),
+                ambient: s(280.0, 40.0),
+                peek: s(340.0, 44.0),
+            },
+            SizePreset::Standard => Self {
+                collapsed: size::COLLAPSED,
+                ambient: size::AMBIENT,
+                peek: size::PEEK,
+            },
+            SizePreset::Comfortable => Self {
+                collapsed: s(260.0, 48.0),
+                ambient: s(330.0, 48.0),
+                peek: s(390.0, 52.0),
+            },
+        }
+    }
+}
+
+/// Default gap between the top of the monitor's work area and the island,
+/// in logical px (user-configurable, see `IslandSettings::top_margin`).
 pub const TOP_MARGIN: f64 = 8.0;
 
 /// Minimum gap kept between the island and the work area's left/right/bottom edges.
 pub const EDGE_MARGIN: f64 = 12.0;
 
-/// The fitted logical size of every layout on one monitor.
+/// How the visible surface is aligned inside the native canvas; follows the
+/// anchor (a left-anchored island grows to the right).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Align {
+    Start,
+    #[default]
+    Center,
+    End,
+}
+
+impl From<Anchor> for Align {
+    fn from(anchor: Anchor) -> Self {
+        match anchor {
+            Anchor::TopLeft => Align::Start,
+            Anchor::TopCenter => Align::Center,
+            Anchor::TopRight => Align::End,
+        }
+    }
+}
+
+/// The fitted logical size of every layout on one monitor, plus the
+/// alignment the frontend uses to position the surface.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Layouts {
     pub collapsed: LogicalSize,
     pub ambient: LogicalSize,
     pub peek: LogicalSize,
     pub expanded: LogicalSize,
+    pub align: Align,
 }
 
 impl Layouts {
@@ -109,50 +166,107 @@ pub fn logical_size_of(area: PhysicalRect, scale_factor: f64) -> LogicalSize {
 /// Layouts shrink (never grow) so they keep [`EDGE_MARGIN`] from the sides
 /// and bottom and `top_margin` from the top. Widths are whole logical pixels
 /// so CSS layout and native geometry agree.
-pub fn fit_layouts(area: LogicalSize, top_margin: f64) -> Layouts {
+pub fn fit_layouts(area: LogicalSize, top_margin: f64, pills: PillSizes) -> Layouts {
     let max_width = (area.width - 2.0 * EDGE_MARGIN).floor().max(1.0);
     let max_height = (area.height - top_margin.max(0.0) - EDGE_MARGIN)
         .floor()
         .max(1.0);
     let fit = |s: LogicalSize| LogicalSize::new(s.width.min(max_width), s.height.min(max_height));
     Layouts {
-        collapsed: fit(size::COLLAPSED),
-        ambient: fit(size::AMBIENT),
-        peek: fit(size::PEEK),
+        collapsed: fit(pills.collapsed),
+        ambient: fit(pills.ambient),
+        peek: fit(pills.peek),
         expanded: fit(size::EXPANDED),
+        align: Align::Center,
     }
 }
 
-/// Computes the physical bounds that center `size` horizontally at the top of
-/// `area`, scaled by `scale_factor`. The result is clamped to stay inside `area`.
+/// Where to put the island on its monitor.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlaceOptions {
+    pub anchor: Anchor,
+    /// Logical px from the anchor position (positive = right).
+    pub offset_x: f64,
+    /// Logical px below the top of the work area.
+    pub top_margin: f64,
+}
+
+impl Default for PlaceOptions {
+    fn default() -> Self {
+        Self {
+            anchor: Anchor::TopCenter,
+            offset_x: 0.0,
+            top_margin: TOP_MARGIN,
+        }
+    }
+}
+
+/// Physical bounds for `size` at the top of `area`, positioned by `options`
+/// and clamped so it stays [`EDGE_MARGIN`] inside the work area (or centered
+/// if it can't). Returns the bounds and the offset actually applied (logical
+/// px, after clamping).
+pub fn place(
+    area: PhysicalRect,
+    scale_factor: f64,
+    size: LogicalSize,
+    options: PlaceOptions,
+) -> (PhysicalRect, f64) {
+    let scale = sanitize_scale(scale_factor);
+    let to_physical = |logical: f64| (logical * scale).round().max(1.0) as u32;
+
+    let width = to_physical(size.width).min(area.width.max(1));
+    let height = to_physical(size.height).min(area.height.max(1));
+    let margin = (options.top_margin.max(0.0) * scale).round() as u32;
+    let free = area.width.saturating_sub(width) as i32;
+    let edge = ((EDGE_MARGIN * scale).round() as i32).min(free / 2);
+
+    let base = match options.anchor {
+        Anchor::TopCenter => area.x + free / 2,
+        Anchor::TopLeft => area.x + edge,
+        Anchor::TopRight => area.x + free - edge,
+    };
+    let offset = if options.offset_x.is_finite() {
+        (options.offset_x * scale).round().clamp(-1e7, 1e7) as i32
+    } else {
+        0
+    };
+    let x = (base + offset).clamp(area.x + edge, area.x + free - edge);
+    let max_margin = area.height.saturating_sub(height);
+    let y = area.y + margin.min(max_margin) as i32;
+    let rect = PhysicalRect {
+        x,
+        y,
+        width,
+        height,
+    };
+    (rect, f64::from(x - base) / scale)
+}
+
+/// Bounds that center `size` horizontally at the top of `area` (the default
+/// placement), clamped inside `area`.
+#[cfg(test)]
 pub fn top_center(
     area: PhysicalRect,
     scale_factor: f64,
     size: LogicalSize,
     top_margin: f64,
 ) -> PhysicalRect {
-    let scale = sanitize_scale(scale_factor);
-    let to_physical = |logical: f64| (logical * scale).round().max(1.0) as u32;
-
-    let width = to_physical(size.width).min(area.width.max(1));
-    let height = to_physical(size.height).min(area.height.max(1));
-    let margin = (top_margin.max(0.0) * scale).round() as u32;
-
-    let x = area.x + (area.width.saturating_sub(width) / 2) as i32;
-    let max_margin = area.height.saturating_sub(height);
-    let y = area.y + margin.min(max_margin) as i32;
-
-    PhysicalRect {
-        x,
-        y,
-        width,
-        height,
-    }
+    place(
+        area,
+        scale_factor,
+        size,
+        PlaceOptions {
+            anchor: Anchor::TopCenter,
+            offset_x: 0.0,
+            top_margin,
+        },
+    )
+    .0
 }
 
 /// The hit/visible region, relative to a window of `window_width` ×
 /// `window_height` physical px, occupied by a surface of logical size `frame`
-/// that the frontend centers horizontally at the top of the window.
+/// that the frontend aligns (`align`) at the top of the window.
 ///
 /// The region is one physical pixel wider on each side and one pixel taller
 /// than the exact surface, to absorb rounding differences between CSS layout
@@ -162,22 +276,78 @@ pub fn frame_region(
     window_height: u32,
     scale_factor: f64,
     frame: LogicalSize,
+    align: Align,
 ) -> PhysicalRect {
     let scale = sanitize_scale(scale_factor);
     let to_physical = |logical: f64| (logical.max(0.0) * scale).round() as u32;
     let width = (to_physical(frame.width) + 2).clamp(1, window_width.max(1));
     let height = (to_physical(frame.height) + 1).clamp(1, window_height.max(1));
+    let x = match align {
+        Align::Start => 0,
+        Align::Center => window_width.saturating_sub(width) / 2,
+        Align::End => window_width.saturating_sub(width),
+    };
     PhysicalRect {
-        x: (window_width.saturating_sub(width) / 2) as i32,
+        x: x as i32,
         y: 0,
         width,
         height,
     }
 }
 
+/// Bounds of a native window sized exactly to `frame`, aligned inside
+/// `canvas` like the surface would be (used by the resize strategy).
+pub fn frame_bounds(
+    canvas: PhysicalRect,
+    scale_factor: f64,
+    frame: LogicalSize,
+    align: Align,
+) -> PhysicalRect {
+    let scale = sanitize_scale(scale_factor);
+    let to_physical = |logical: f64| (logical.max(0.0) * scale).round().max(1.0) as u32;
+    let width = to_physical(frame.width).min(canvas.width.max(1));
+    let height = to_physical(frame.height).min(canvas.height.max(1));
+    let x = match align {
+        Align::Start => 0,
+        Align::Center => canvas.width.saturating_sub(width) / 2,
+        Align::End => canvas.width.saturating_sub(width),
+    };
+    PhysicalRect {
+        x: canvas.x + x as i32,
+        y: canvas.y,
+        width,
+        height,
+    }
+}
+
+/// Whether a window rectangle (`left, top, right, bottom`) covers the whole
+/// `monitor`: the signature of a fullscreen window.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn covers(window: (i32, i32, i32, i32), monitor: PhysicalRect) -> bool {
+    let (left, top, right, bottom) = window;
+    monitor.width > 0
+        && monitor.height > 0
+        && left <= monitor.x
+        && top <= monitor.y
+        && right >= monitor.x + monitor.width as i32
+        && bottom >= monitor.y + monitor.height as i32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn standard() -> PillSizes {
+        PillSizes::for_preset(SizePreset::Standard)
+    }
+
+    fn opts(anchor: Anchor, offset_x: f64) -> PlaceOptions {
+        PlaceOptions {
+            anchor,
+            offset_x,
+            top_margin: TOP_MARGIN,
+        }
+    }
 
     const fn area(x: i32, y: i32, width: u32, height: u32) -> PhysicalRect {
         PhysicalRect {
@@ -266,7 +436,7 @@ mod tests {
 
     #[test]
     fn layouts_keep_design_targets_on_large_monitors() {
-        let l = fit_layouts(LogicalSize::new(1920.0, 1040.0), TOP_MARGIN);
+        let l = fit_layouts(LogicalSize::new(1920.0, 1040.0), TOP_MARGIN, standard());
         assert_eq!(l.collapsed, size::COLLAPSED);
         assert_eq!(l.peek, size::PEEK);
         assert_eq!(l.expanded, size::EXPANDED);
@@ -277,7 +447,7 @@ mod tests {
     fn expanded_layout_narrows_on_small_monitors() {
         // 1024 px at 150% scaling is ~683 logical px wide.
         let logical = logical_size_of(area(0, 0, 1024, 728), 1.5);
-        let l = fit_layouts(logical, TOP_MARGIN);
+        let l = fit_layouts(logical, TOP_MARGIN, standard());
         assert_eq!(l.expanded.width, (1024.0f64 / 1.5 - 24.0).floor());
         assert_eq!(l.expanded.height, size::EXPANDED.height);
         assert_eq!(l.collapsed, size::COLLAPSED, "small layouts are untouched");
@@ -289,22 +459,22 @@ mod tests {
 
     #[test]
     fn layouts_never_exceed_short_or_tiny_work_areas() {
-        let l = fit_layouts(LogicalSize::new(300.0, 200.0), TOP_MARGIN);
+        let l = fit_layouts(LogicalSize::new(300.0, 200.0), TOP_MARGIN, standard());
         assert_eq!(l.expanded, LogicalSize::new(276.0, 180.0));
-        let l = fit_layouts(LogicalSize::new(0.0, 0.0), TOP_MARGIN);
+        let l = fit_layouts(LogicalSize::new(0.0, 0.0), TOP_MARGIN, standard());
         assert_eq!(l.expanded, LogicalSize::new(1.0, 1.0));
     }
 
     #[test]
     fn frame_region_is_centered_and_padded() {
         // 820 x 248 canvas at 100%; collapsed pill in the middle.
-        let r = frame_region(820, 248, 1.0, size::COLLAPSED);
+        let r = frame_region(820, 248, 1.0, size::COLLAPSED, Align::Center);
         assert_eq!(r, area(299, 0, 222, 45));
         // At 150%: canvas 1230 x 372, pill 330 x 66.
-        let r = frame_region(1230, 372, 1.5, size::COLLAPSED);
+        let r = frame_region(1230, 372, 1.5, size::COLLAPSED, Align::Center);
         assert_eq!(r, area(449, 0, 332, 67));
         // Full canvas is clamped to the window.
-        let r = frame_region(820, 248, 1.0, size::EXPANDED);
+        let r = frame_region(820, 248, 1.0, size::EXPANDED, Align::Center);
         assert_eq!(r, area(0, 0, 820, 248));
     }
 
@@ -313,7 +483,7 @@ mod tests {
         for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
             let canvas = top_center(area(0, 0, 3840, 2100), scale, size::EXPANDED, 0.0);
             for frame in [size::COLLAPSED, size::PEEK, LogicalSize::new(341.0, 47.0)] {
-                let r = frame_region(canvas.width, canvas.height, scale, frame);
+                let r = frame_region(canvas.width, canvas.height, scale, frame, Align::Center);
                 // CSS centers the surface at (canvas - frame) / 2 in physical px.
                 let left = (f64::from(canvas.width) - frame.width * scale) / 2.0;
                 let right = left + frame.width * scale;
@@ -338,5 +508,122 @@ mod tests {
         ] {
             assert!(LogicalSize::validated(w, h).is_none());
         }
+    }
+
+    #[test]
+    fn anchors_place_the_canvas_at_the_edges_with_a_margin() {
+        let a = area(0, 0, 1920, 1040);
+        let (left, off) = place(a, 1.0, size::EXPANDED, opts(Anchor::TopLeft, 0.0));
+        assert_eq!((left.x, off), (12, 0.0));
+        let (right, _) = place(a, 1.0, size::EXPANDED, opts(Anchor::TopRight, 0.0));
+        assert_eq!(right.x + right.width as i32, 1920 - 12);
+        // 150% on a monitor left of the primary (negative origin).
+        let b = area(-2560, -200, 2560, 1400);
+        let (left, _) = place(b, 1.5, size::EXPANDED, opts(Anchor::TopLeft, 0.0));
+        assert_eq!(left.x, -2560 + 18);
+        let (right, _) = place(b, 1.5, size::EXPANDED, opts(Anchor::TopRight, 0.0));
+        assert_eq!(right.x + right.width as i32, -18);
+        assert_eq!(right.y, -200 + 12);
+    }
+
+    #[test]
+    fn offsets_move_the_island_and_are_clamped_on_screen() {
+        let a = area(0, 0, 1920, 1040);
+        let (r, applied) = place(a, 1.0, size::EXPANDED, opts(Anchor::TopCenter, -100.0));
+        assert_eq!((r.x, applied), (450, -100.0));
+        // Far beyond the edge: clamped 12 px inside, and the applied offset says so.
+        let (r, applied) = place(a, 1.0, size::EXPANDED, opts(Anchor::TopCenter, 5000.0));
+        assert_eq!(r.x + r.width as i32, 1908);
+        assert_eq!(applied, 538.0);
+        let (r, applied) = place(a, 1.25, size::EXPANDED, opts(Anchor::TopLeft, -40.0));
+        assert_eq!((r.x, applied), (15, 0.0), "can't go left of the left edge");
+        // Non-finite offsets are ignored.
+        let (r, _) = place(a, 1.0, size::EXPANDED, opts(Anchor::TopCenter, f64::NAN));
+        assert_eq!(r.x, 550);
+    }
+
+    #[test]
+    fn island_stays_inside_every_monitor_layout() {
+        let monitors = [
+            (area(0, 0, 1920, 1040), 1.0),
+            (area(0, 0, 1920, 1032), 1.25),
+            (area(-1920, 48, 1920, 1032), 1.0),
+            (area(1920, -360, 2560, 1400), 1.5),
+            (area(3840, 0, 1024, 728), 1.5),
+            (area(0, 0, 800, 560), 1.75),
+        ];
+        for (a, scale) in monitors {
+            for anchor in [Anchor::TopLeft, Anchor::TopCenter, Anchor::TopRight] {
+                for offset in [-3000.0, -50.0, 0.0, 50.0, 3000.0] {
+                    let layouts = fit_layouts(logical_size_of(a, scale), TOP_MARGIN, standard());
+                    let (r, _) = place(a, scale, layouts.canvas(), opts(anchor, offset));
+                    assert!(r.x >= a.x, "{a:?} {scale} {anchor:?} {offset}");
+                    assert!(r.x + r.width as i32 <= a.x + a.width as i32);
+                    assert!(r.y >= a.y && r.y + r.height as i32 <= a.y + a.height as i32);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn size_presets_keep_proportions() {
+        for preset in [
+            SizePreset::Compact,
+            SizePreset::Standard,
+            SizePreset::Comfortable,
+        ] {
+            let p = PillSizes::for_preset(preset);
+            assert!(p.ambient.width > p.collapsed.width);
+            assert_eq!(p.ambient.height, p.collapsed.height);
+            assert!(p.peek.width > p.ambient.width && p.peek.height > p.collapsed.height);
+            let l = fit_layouts(LogicalSize::new(1920.0, 1040.0), TOP_MARGIN, p);
+            assert_eq!(l.canvas(), size::EXPANDED, "the canvas stays the dashboard");
+        }
+        assert_eq!(
+            PillSizes::for_preset(SizePreset::Compact).collapsed,
+            LogicalSize::new(200.0, 40.0)
+        );
+        assert_eq!(
+            PillSizes::for_preset(SizePreset::Comfortable).collapsed,
+            LogicalSize::new(260.0, 48.0)
+        );
+    }
+
+    #[test]
+    fn regions_follow_the_alignment() {
+        assert_eq!(
+            frame_region(820, 248, 1.0, size::COLLAPSED, Align::Start),
+            area(0, 0, 222, 45)
+        );
+        assert_eq!(
+            frame_region(820, 248, 1.0, size::COLLAPSED, Align::End),
+            area(598, 0, 222, 45)
+        );
+        let canvas = area(100, 8, 820, 248);
+        assert_eq!(
+            frame_bounds(canvas, 1.0, size::COLLAPSED, Align::End),
+            area(700, 8, 220, 44)
+        );
+        assert_eq!(
+            frame_bounds(canvas, 1.0, size::COLLAPSED, Align::Center),
+            area(400, 8, 220, 44)
+        );
+        assert_eq!(
+            frame_bounds(canvas, 1.0, size::COLLAPSED, Align::Start),
+            area(100, 8, 220, 44)
+        );
+    }
+
+    #[test]
+    fn detects_windows_covering_a_monitor() {
+        let m = area(-1920, 0, 1920, 1080);
+        assert!(covers((-1920, 0, 0, 1080), m));
+        assert!(covers((-1928, -8, 8, 1088), m), "invisible borders");
+        assert!(
+            !covers((-1920, 0, 0, 1040), m),
+            "work area only (maximized)"
+        );
+        assert!(!covers((0, 0, 1920, 1080), m), "another monitor");
+        assert!(!covers((0, 0, 0, 0), area(0, 0, 0, 0)));
     }
 }
