@@ -1,0 +1,39 @@
+[package]
+name = "islandy"
+version = "0.1.0"
+description = "A lightweight, context-aware floating island for Windows."
+authors = ["Islandy contributors"]
+license = "UNLICENSED"
+edition = "2021"
+rust-version = "1.80"
+publish = false
+
+[lib]
+# `islandy_lib` avoids a name clash with the `islandy` binary on Windows.
+name = "islandy_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Already a transitive dependency of Tauri on Linux; used only for dev-host window sizing.
+gtk = "0.18"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

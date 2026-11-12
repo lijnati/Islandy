@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist/wght.css";
+@import "./tokens.css";
+
+@layer base {
+  /*
+   * The native window is transparent; the island draws its own surface.
+   * Every ancestor of the island must stay transparent or the window
+   * rectangle becomes visible.
+   */
+  html,
+  body,
+  #root {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-fg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "tnum" 1; /* stable-width digits for the clock */
+    user-select: none;
+    cursor: default;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
+  }
+}
