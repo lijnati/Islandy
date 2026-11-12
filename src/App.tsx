@@ -1,5 +1,5 @@
-import { Island } from "./features/island/Island";
+import { IslandRoot } from "./components/island/IslandRoot";
 
 export function App() {
-  return <Island />;
+  return <IslandRoot />;
 }

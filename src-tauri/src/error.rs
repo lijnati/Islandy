@@ -10,6 +10,11 @@ pub enum IslandyError {
     WindowNotFound(&'static str),
     #[error("no monitor is available to place the island on")]
     NoMonitor,
+    #[error("invalid argument: {0}")]
+    InvalidArgument(&'static str),
+    #[cfg_attr(windows, allow(dead_code))] // only constructed off Windows
+    #[error("{0}")]
+    Unsupported(&'static str),
     #[cfg_attr(not(windows), allow(dead_code))] // only constructed by Win32 code
     #[error("platform integration failed: {0}")]
     Platform(String),
@@ -22,6 +27,8 @@ impl IslandyError {
         match self {
             Self::WindowNotFound(_) => "window",
             Self::NoMonitor => "monitor",
+            Self::InvalidArgument(_) => "invalid",
+            Self::Unsupported(_) => "unsupported",
             Self::Platform(_) => "platform",
             Self::Tauri(_) => "internal",
         }

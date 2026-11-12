@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-island-frame"
+description = "Enables the set_island_frame command without any pre-configured scope."
+commands.allow = ["set_island_frame"]
+
+[[permission]]
+identifier = "deny-set-island-frame"
+description = "Denies the set_island_frame command without any pre-configured scope."
+commands.deny = ["set_island_frame"]

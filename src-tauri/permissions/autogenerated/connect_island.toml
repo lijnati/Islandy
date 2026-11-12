@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-connect-island"
+description = "Enables the connect_island command without any pre-configured scope."
+commands.allow = ["connect_island"]
+
+[[permission]]
+identifier = "deny-connect-island"
+description = "Denies the connect_island command without any pre-configured scope."
+commands.deny = ["connect_island"]

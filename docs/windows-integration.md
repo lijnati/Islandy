@@ -20,7 +20,7 @@ later.
 
 ---
 
-## Window behavior (Phase 0: partly implemented)
+## Window behavior (Phases 0–1: implemented, unverified on Windows)
 
 | Behavior                | Mechanism                                                  | Status                             |
 | ----------------------- | ---------------------------------------------------------- | ---------------------------------- |
@@ -30,6 +30,12 @@ later.
 | Hidden from Alt+Tab     | `WS_EX_TOOLWINDOW` (Win32, `platform/windows.rs`)          | Implemented; unverified            |
 | Doesn't steal focus     | `focusable: false` → tao sets `WS_EX_NOACTIVATE`           | Implemented; unverified            |
 | DPI-aware top-center    | monitor work area × scale factor (`window/geometry.rs`)    | Implemented; math unit-tested      |
+| Click-through outside   | `SetWindowRgn` on a fixed canvas (`FrameStrategy::Region`) | Implemented; unverified            |
+| Atomic move + resize    | one `SetWindowPos` (resize fallback)                       | Implemented; unverified            |
+| Keyboard when pinned    | `set_focusable(true)` + focus; restore previous window     | Implemented; unverified            |
+| Click outside           | debounced `WindowEvent::Focused(false)`, no mouse hook     | Implemented; unverified            |
+| Global shortcut         | `tauri-plugin-global-shortcut` (`RegisterHotKey`)          | Implemented; unverified            |
+| Settings pages          | `ShellExecuteW("ms-settings:…")`, fixed allow-list         | Implemented; unverified            |
 
 Notes and risks:
 
@@ -40,17 +46,24 @@ Notes and risks:
   when clicked. Verify on Windows: click the island while typing in another app and confirm the
   caret stays. Fallback: subclass the top-level window and return `MA_NOACTIVATE` from
   `WM_MOUSEACTIVATE`.
-- **Keyboard input in `focused` mode** needs a focusable window. Plan: call `set_focusable(true)`
-  when entering `focused` and `set_focusable(false)` on leaving. Re-apply
-  `WS_EX_TOOLWINDOW` after each change (see `architecture.md`, native style caveat).
-- **Display changes.** Tauri has no monitor-change event. Plan: handle `WM_DISPLAYCHANGE`
-  (resolution, monitor hot-plug) and `WM_SETTINGCHANGE` with `SPI_SETWORKAREA` (taskbar
-  moved or resized), then call `IslandWindow::reposition()`. Both arrive at top-level windows,
-  so a small window subclass, or a hidden message-only window, can catch them.
-- **Click-through corners.** The window is exactly the pill's bounding rectangle. To make the
-  transparent corner pixels click-through as well, use `SetWindowRgn` with a rounded region.
-  The tradeoff is pixel-aligned (aliased) region edges. A per-pixel alternative is to handle
-  `WM_NCHITTEST` and return `HTTRANSPARENT` outside the shape.
+- **Keyboard input** needs a focusable window. Implemented (Phase 1): pinning calls
+  `set_focusable(true)` and focuses the window; collapsing calls `set_focusable(false)`.
+  `WS_EX_TOOLWINDOW` is re-applied after each change (see `architecture.md`). Foreground
+  rules: `SetForegroundWindow` succeeds because the island just received the user's click or
+  hotkey. Verify on Windows that focus really moves on click and on the shortcut.
+- **Window regions with transparent WebView2 (top Phase 1 risk).** On the Linux dev host, an
+  X11 bounding shape stopped WebKitGTK from painting, so Linux uses only an input shape.
+  Whether `SetWindowRgn` clips DirectComposition-based WebView2 content cleanly on Windows
+  10/11 is **unverified**. If the island renders blank or with artifacts, run with
+  `ISLANDY_FRAME_STRATEGY=resize` and report it; a per-pixel alternative is to keep the
+  canvas and return `HTTRANSPARENT` from `WM_NCHITTEST` outside the frame (window subclass).
+- **Display changes.** Tauri has no monitor-change event. Phase 1 re-reads the monitor on
+  every layout request and frame change (i.e. on the next hover), and on DPI changes. Still
+  planned: handle `WM_DISPLAYCHANGE` and `WM_SETTINGCHANGE`/`SPI_SETWORKAREA` so the resting
+  pill moves immediately when the taskbar or resolution changes.
+- **Click-through corners.** The region is the frame's bounding rectangle, so the few
+  transparent pixels at the rounded corners still receive clicks. A rounded region would fix
+  it at the cost of aliased edges; `WM_NCHITTEST` → `HTTRANSPARENT` is the per-pixel option.
 
 ### Fullscreen and maximized applications (recommendation for a later phase)
 
