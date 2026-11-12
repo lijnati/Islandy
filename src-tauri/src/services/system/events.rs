@@ -110,7 +110,7 @@ impl SystemHub {
         inner.snapshot.revision += 1;
         let revision = inner.snapshot.revision;
         #[cfg(debug_assertions)]
-        eprintln!("[islandy] system alert r{revision}: {alert:?}");
+        crate::log_debug!("system", "system alert r{revision}: {alert:?}");
         if let Some(observer) = inner.observer.as_ref() {
             observer(&alert);
         }

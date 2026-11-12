@@ -34,7 +34,7 @@ export function Switch({ checked, onChange, label, disabled = false, busy = fals
       className={cx(
         "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors duration-fast ease-standard",
         focusRing,
-        checked ? "border-transparent bg-fg" : "border-hairline-strong bg-surface-hover",
+        checked ? "border-transparent bg-accent" : "border-hairline-strong bg-surface-hover",
         busy && "opacity-60",
         disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer",
       )}
@@ -43,7 +43,7 @@ export function Switch({ checked, onChange, label, disabled = false, busy = fals
         aria-hidden="true"
         className={cx(
           "absolute size-3.5 rounded-full shadow-control transition-transform duration-base ease-standard",
-          checked ? "translate-x-[18px] bg-surface" : "translate-x-[2px] bg-fg",
+          checked ? "translate-x-[18px] bg-on-accent" : "translate-x-[2px] bg-fg",
         )}
       />
     </button>

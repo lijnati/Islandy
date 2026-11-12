@@ -51,12 +51,35 @@ Windows. (The installer may download WebView2 if it's missing; that's Microsoft'
 | Quiet mode (no automatic peeks)                                            | Moon button in the dashboard toolbar, or Integrations                                    |
 | Turn off every Claude Code hook                                            | `"disableAllHooks": true` in Claude Code settings                                        |
 
-Uninstalling Islandy doesn't remove the Claude Code hooks: press **Remove hooks** first. If
-Islandy is already gone, the hooks point at a missing program and Claude Code may report hook
-errors. Remove them by hand (see
+Uninstalling Islandy (not updating it) removes its Claude Code hooks automatically, with a
+backup, leaving every other hook in place, and removes the start-at-sign-in entry. If Islandy was
+deleted without its uninstaller, remove the hooks by hand (see
 [claude-code-integration.md](claude-code-integration.md#manual-setup)).
+
+Phase 5 adds a **Settings › Privacy** page with all of these in one place: what is and isn't
+collected, history retention (1–30 days, default 7), Clear history, the files Islandy stores and
+their sizes, buttons that open the data and log folders, and **Reset settings** (Settings ›
+General).
 
 ## Logging
 
-Release builds log errors only, without activity content. Debug builds also log each received
-activity event's _name_ and opaque session key to stderr, for troubleshooting.
+- `logs/islandy.log` in the data directory, at most 1 MiB per file and 3 files (≈ 3 MiB).
+- Levels: errors, warnings and a few lifecycle lines (start, quit, settings and shortcut
+  changes). Debug entries only with **Settings › Privacy › Detailed logging** (off by default).
+- Never logged: hook payloads, prompts, tool input/output, track titles, window titles, tokens,
+  environment variables. As a second line of defence every line is sanitized: control characters
+  stripped, the profile path replaced by `~`, token-like runs of 32+ characters redacted, length
+  capped.
+- Debug builds also print log lines to stderr.
+
+## Diagnostic summary
+
+**Settings › Privacy › Copy diagnostic summary** builds a plain-text report on demand: Islandy and
+Windows versions, window strategy and placement (sizes only), shortcut and startup state, which
+features are available, integration status, and the sanitized recent warnings above. It contains
+no activity, tokens or file contents, and nothing is sent anywhere; you decide whether to share it.
+
+## Preferences
+
+`settings.json` holds appearance, island position, interaction and widget preferences only (see
+[settings.md](settings.md)). No secret is stored in it.

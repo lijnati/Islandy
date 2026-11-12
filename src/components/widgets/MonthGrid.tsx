@@ -61,7 +61,7 @@ export function MonthGrid({ year, month, today, size = "sm" }: MonthGridProps) {
                     "mx-auto flex items-center justify-center rounded-full",
                     size === "sm" ? "size-4" : "size-[18px]",
                     c.isToday
-                      ? "bg-accent font-semibold text-surface"
+                      ? "bg-accent font-semibold text-on-accent"
                       : c.inMonth
                         ? "text-fg"
                         : "text-fg-subtle/60",

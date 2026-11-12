@@ -1,6 +1,7 @@
 import { createStore, useStore } from "zustand";
 
-import { designLayouts } from "../../design/tokens";
+import { designLayouts, PILL_SIZES } from "../../design/tokens";
+import { settingsStore } from "../settings/settings-store";
 import { getIslandLayouts, isNativeAvailable } from "../../services/native";
 import type { IslandLayouts, Size } from "../../services/types";
 import type { IslandMode } from "./island-store";
@@ -23,6 +24,7 @@ export function fitToViewport(
     ambient: fit(layouts.ambient),
     peek: fit(layouts.peek),
     expanded: fit(layouts.expanded),
+    align: layouts.align ?? "center",
   };
 }
 
@@ -56,8 +58,12 @@ export function useLayouts(): IslandLayouts {
 /** Fetches fitted layouts from Rust, or fits to the viewport in a browser. */
 export async function refreshLayouts(): Promise<void> {
   if (!isNativeAvailable()) {
+    const preset = PILL_SIZES[settingsStore.getState().state.settings.island.size];
     layoutStore.setState({
-      layouts: fitToViewport({ width: window.innerWidth, height: window.innerHeight }),
+      layouts: fitToViewport(
+        { width: window.innerWidth, height: window.innerHeight },
+        { ...designLayouts, ...preset },
+      ),
       source: "design",
     });
     return;

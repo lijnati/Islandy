@@ -1,0 +1,32 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings",
+  "description": "Least-privilege capability for the settings window: Islandy's settings, startup, diagnostics and integration commands, and read-only snapshots. It cannot resize or move the island, control media or change system state. No core or plugin permissions.",
+  "windows": ["settings"],
+  "permissions": [
+    "allow-get-app-info",
+    "allow-connect-settings",
+    "allow-update-settings",
+    "allow-reset-settings",
+    "allow-set-toggle-shortcut",
+    "allow-get-shortcut-status",
+    "allow-get-startup-status",
+    "allow-set-launch-at-login",
+    "allow-list-monitors",
+    "allow-set-island-visible",
+    "allow-open-islandy-folder",
+    "allow-get-storage-info",
+    "allow-get-diagnostics",
+    "allow-get-activity-snapshot",
+    "allow-clear-activity-history",
+    "allow-set-quiet-mode",
+    "allow-set-activity-source",
+    "allow-set-activity-settings",
+    "allow-get-claude-integration",
+    "allow-install-claude-integration",
+    "allow-remove-claude-integration",
+    "allow-test-local-receiver",
+    "allow-get-media-snapshot",
+    "allow-get-system-snapshot"
+  ]
+}

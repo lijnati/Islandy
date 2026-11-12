@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-island-offset"
+description = "Enables the preview_island_offset command without any pre-configured scope."
+commands.allow = ["preview_island_offset"]
+
+[[permission]]
+identifier = "deny-preview-island-offset"
+description = "Denies the preview_island_offset command without any pre-configured scope."
+commands.deny = ["preview_island_offset"]

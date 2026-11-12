@@ -4,4 +4,6 @@
 pub mod geometry;
 mod manager;
 
-pub use manager::{FrameStrategy, IslandWindow, WindowState};
+pub use manager::{
+    FrameStrategy, IslandWindow, MonitorInfo, PlacementConfig, WindowState, ISLAND_LABEL,
+};

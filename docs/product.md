@@ -47,6 +47,13 @@ events never interrupt the dashboard; only one transition animates at a time.
 Quick controls are honest: in Phase 1 they open the matching Windows Settings page; real
 toggles come in Phase 3.
 
+## Personalization (Phase 5)
+
+Islandy 0.1.0 lets people make it theirs without breaking it: three themes and six accents, position
+and size, which widgets appear and in what order, how it reacts to the pointer, which events may
+interrupt, and a shortcut. Every option is bounded so Islandy always stays reachable (pointer,
+shortcut or tray), and nothing changes Windows' own settings.
+
 ## Non-goals
 
 - Replacing the Windows taskbar, Start menu, or notification center.

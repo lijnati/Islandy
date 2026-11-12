@@ -27,6 +27,39 @@ input.
 | Demo data           | The activity widget shows local, hard-coded sample data labelled "Demo".                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Media (Phase 2)     | Read through the public GSMTC API only; no app-specific APIs, no network, no elevation. Media commands take a validated session id (`s<digits>`), an action enum, or a finite non-negative position; artwork keys are validated. Artwork stays in memory: decoded with WIC (≤ 8 MB source, ≤ 8192 px), re-encoded as a ≤ 256 px JPEG, served as a `data:` URL (already allowed by the CSP), never written to disk, never fetched remotely. Metadata is length-capped and stripped of control characters. Release builds log only errors, never titles or artists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
+## Phase 5 additions (release audit)
+
+- **Capabilities split per window.** `capabilities/island.json` (island) and
+  `capabilities/settings.json` (settings window) each grant only Islandy's own commands that window
+  uses; neither grants any `core:*` or plugin permission. The settings window can't resize/move
+  the island frame, control media, or change system state; the island can't change startup,
+  shortcuts, reset settings, open folders or read diagnostics.
+- **New commands take typed, bounded input only.** Settings are a closed schema normalized in
+  Rust; the shortcut is parsed and validated (modifier required, Windows-reserved combinations
+  refused); offsets must be finite and are clamped on screen; settings pages and folders are
+  enums. No command accepts a path, URL, command line or free-form identifier.
+- **Opening folders** uses `ShellExecuteW("open")` on a path Islandy derives itself (data or logs
+  directory), never on input from the UI.
+- **Launch at startup** writes one per-user `Run` value with the quoted executable path; no admin
+  rights, HKLM, services or scheduled tasks. The official autostart plugin was not used because it
+  writes the path unquoted and tries HKLM first.
+- **Single instance** (`tauri-plugin-single-instance`): a second launch hands over and exits before
+  creating a tray icon, receiver or shortcut.
+- **Secrets.** The only secret is the receiver token (`receiver.json`, per-user profile ACL; 0600
+  on Unix). It is never shown, logged or included in diagnostics. Windows Credential Manager was
+  considered: it would not protect the token from other processes of the same user (the CLI must
+  read it anyway), so it adds no real protection here.
+- **Uninstall** removes only what Islandy added (Run value, its own Claude Code hooks with a backup).
+- **Updater** not enabled (no endpoint or signing key exists; see release.md).
+- **Dependency audit:** see the Phase 5 report in docs/releases/v0.1.0-rc.1.md.
+
+### Open risks
+
+- Binaries are unsigned (SmartScreen warnings; no publisher identity).
+- Any process running as the same user can read the receiver token and post activity events
+  (they can only create activity entries; same trust level as the user).
+- Windows runtime behaviour of all of the above is unverified on real hardware.
+
 ## Rules for future work
 
 1. **Every new IPC command** must be added to the app manifest (`build.rs`), granted

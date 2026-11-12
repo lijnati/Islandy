@@ -130,11 +130,34 @@ in `README.md`.
 "open terminal/project" (no verified target, and paths are not stored), terminal scraping,
 process monitoring.
 
-## Phase 5: Polish and release
+## Phase 5: Personalization, polish and Windows release ✅ (Windows runtime verification pending)
 
-- Quiet-mode scheduling; customizable peek durations.
-- Settings surface (minimal: shortcut, top offset), accessibility audit with a screen reader.
-- Single instance; start with Windows (opt-in).
-- Final identifier, icon, and branding; code signing; signed updater.
-- Optional: ICS calendar subscription; MSIX packaging evaluation (would enable notification
-  listener and appointments APIs).
+- Typed, versioned, validated settings (`settings.json`) with lenient loading, corruption
+  recovery, migrations framework, atomic writes, reset, and live sync to every window.
+- Separate settings window: General, Appearance, Island, Widgets, Integrations, Notifications,
+  Privacy, About.
+- Themes (Midnight, Graphite, Frost), accents, opacity, corners, animation intensity, reduced
+  motion override.
+- Placement: monitor selection, left/center/right, offset, top margin, Alt+drag; size presets.
+- Widget registry with enable/disable/reorder (media, calendar, activity, system, sound).
+- Interaction preferences (hover/click/pin/delays/auto-collapse), applied without restart.
+- Configurable global shortcut with conflict-safe re-registration.
+- Launch at sign-in (per-user Run key), start hidden, single instance, tray menu, hide vs quit.
+- Notification preferences (per source and outcome, duration, retention 1–30 days), per-source
+  peek rate limit.
+- Fullscreen auto-hide, 2 s display watcher, local bounded logs, diagnostic summary, branding,
+  NSIS installer with uninstall cleanup.
+
+**Verified:** automated tests; the real app on Linux (settings window, single instance, startup
+entry, persistence, placement, hooks install/remove, test event); the Windows installer and
+uninstaller under Wine (files, shortcuts, HKCU keys, Run cleanup, hook cleanup, update mode).
+**Exit gate still open:** the README Windows checklist (all phases) on Windows 10 and 11.
+
+**Not done, by decision:** quiet-mode scheduling, automatic updates (no endpoint/signing key),
+code signing, native acrylic blur, MSIX, ICS calendars, a screen-reader audit.
+
+## Later
+
+- Code signing and a signed updater; MSIX evaluation.
+- Quiet-mode schedule; screen-reader accessibility audit; ICS calendar subscription.
+- Event-driven fullscreen detection; handling `WM_ENDSESSION` to flush history.

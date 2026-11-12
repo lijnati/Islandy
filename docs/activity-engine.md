@@ -146,6 +146,21 @@ canvas union) to show, in priority order:
 Idle, ended, dismissed and stale sessions don't occupy the pill. The working glyph turns slowly
 (a CSS `transform` animation, disabled with reduced motion). Attention and idle states are static.
 
+## Notification preferences (Phase 5)
+
+`ActivitySettings` (in `activity.json`) also holds `peeks` (Claude Code, developer, system,
+media, success, errors), `peekDuration` (short ×0.75, standard, long ×1.5) and `retentionDays`
+(1–30, default 7). The engine applies them in `allow_peek` after recording: a filtered event is
+still stored and still drives ambient indicators. Media peeks are decided in the UI with the same
+switch.
+
+**Rate limit:** each source may produce at most 4 peeks per 60 s (`PEEK_BUDGET`,
+`PEEK_WINDOW_MS`). P0 requests for attention are exempt. Events over the budget are recorded
+silently, so one noisy integration can't take over the island.
+
+The snapshot also reports `lastReceived` (when Claude Code and developer events last arrived,
+including unrecorded tool events) for the Integrations page.
+
 ## Quiet mode
 
 Quiet mode is Islandy's own; it is not Windows Do Not Disturb and changes no Windows setting. It:
@@ -155,14 +170,14 @@ Quiet mode is Islandy's own; it is not Windows Do Not Disturb and changes no Win
 - shows a moon in the pill and a pressed moon button in the toolbar;
 - persists across restarts (`activity.json`).
 
-Scheduling belongs to Phase 5.
+Scheduling is not implemented (see roadmap).
 
 ## History and retention
 
 `activity.json` in `%LOCALAPPDATA%\com.islandy.desktop` (Linux:
 `~/.local/share/com.islandy.desktop`):
 
-- At most 300 events, and nothing older than 7 days, enforced on load, on every write and by
+- At most 300 events, and nothing older than the retention setting (default 7 days), enforced on load, on every write and by
   the engine's deadline.
 - Written atomically (temp file + rename), debounced 1.5 s, and on exit.
 - A malformed file is moved to `activity.corrupt.json`. Single bad records are skipped.

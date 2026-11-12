@@ -12,7 +12,9 @@
 
   /* Colors — neo-Swiss dark minimalism. Accents are reserved for status. */
   --color-transparent: transparent;
-  --color-surface: #080808; /* island body */
+  /* Island body; `--island-alpha` is the user's background opacity (0.7–1). */
+  --color-surface: rgb(8 8 8 / var(--island-alpha, 1));
+  --color-surface-pill-hover: rgb(14 14 14 / var(--island-alpha, 1));
   --color-surface-secondary: #171717; /* widget cards */
   --color-surface-elevated: #222222; /* controls, tooltips */
   --color-surface-raised: rgb(255 255 255 / 0.06); /* translucent secondary surface */
@@ -22,7 +24,9 @@
   --color-fg-subtle: #5c5c5c; /* tertiary / disabled */
   --color-hairline: rgb(255 255 255 / 0.08); /* borders */
   --color-hairline-strong: rgb(255 255 255 / 0.16);
-  --color-accent: #ffffff;
+  /* User accent (controls, selection); status colours are separate. */
+  --color-accent: #f5f5f5;
+  --color-on-accent: #080808; /* text/knobs drawn on the accent */
   --color-focus: rgb(255 255 255 / 0.72); /* keyboard focus ring */
   /* Status — restrained, used only for small indicators. */
   --color-status-neutral: #909090;
@@ -56,6 +60,7 @@
   --radius-island: 9999px;
   --radius-panel: 30px; /* expanded dashboard; mirrors radius.panel in tokens.ts */
   --radius-tile: 18px; /* widgets inside the dashboard */
+  --radius-field: 8px; /* settings window controls */
   --radius-art: 12px; /* album artwork */
   --radius-control: 10px;
 
@@ -109,4 +114,69 @@
   --z-content: 10;
   --z-overlay: 20;
   --z-toast: 30;
+}
+
+/*
+ * Themes, accents and corner presets (Settings › Appearance). Applied as
+ * attributes on <html> by src/features/settings/appearance.ts; they only
+ * override the tokens above, so no component hard-codes a theme colour.
+ */
+[data-theme="graphite"] {
+  --color-surface: rgb(27 27 29 / var(--island-alpha, 1));
+  --color-surface-pill-hover: rgb(34 34 37 / var(--island-alpha, 1));
+  --color-surface-secondary: #2a2a2d;
+  --color-surface-elevated: #37373b;
+  --color-fg-muted: #9d9da3;
+  --color-fg-subtle: #66666c;
+}
+
+/*
+ * Frost: translucent surfaces with high-contrast text. The WebView can't blur
+ * the desktop behind a transparent window, and native acrylic is not enabled
+ * (see docs/settings.md), so frost relies on tinted translucency only.
+ */
+[data-theme="frost"] {
+  --color-surface: rgb(30 32 38 / calc(0.8 * var(--island-alpha, 1)));
+  --color-surface-pill-hover: rgb(40 42 50 / calc(0.86 * var(--island-alpha, 1)));
+  --color-surface-secondary: rgb(255 255 255 / 0.09);
+  --color-surface-elevated: rgb(60 63 72 / 0.96);
+  --color-surface-raised: rgb(255 255 255 / 0.1);
+  --color-surface-hover: rgb(255 255 255 / 0.14);
+  --color-fg: #ffffff;
+  --color-fg-muted: #b4b8c2;
+  --color-fg-subtle: #7c808a;
+  --color-hairline: rgb(255 255 255 / 0.14);
+  --color-hairline-strong: rgb(255 255 255 / 0.24);
+}
+
+[data-accent="blue"] {
+  --color-accent: #6aa8ff;
+  --color-on-accent: #04101f;
+}
+[data-accent="violet"] {
+  --color-accent: #ad95ff;
+  --color-on-accent: #120a26;
+}
+[data-accent="green"] {
+  --color-accent: #4fd6a8;
+  --color-on-accent: #03180f;
+}
+[data-accent="amber"] {
+  --color-accent: #f5c56b;
+  --color-on-accent: #1d1303;
+}
+[data-accent="coral"] {
+  --color-accent: #ff9479;
+  --color-on-accent: #250a04;
+}
+
+[data-corners="compact"] {
+  --radius-panel: 22px;
+  --radius-tile: 12px;
+  --radius-art: 9px;
+}
+[data-corners="round"] {
+  --radius-panel: 34px;
+  --radius-tile: 22px;
+  --radius-art: 14px;
 }

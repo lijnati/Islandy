@@ -24,6 +24,9 @@ pub enum IslandyError {
     System(#[from] crate::services::system::SystemError),
     #[error(transparent)]
     Integration(#[from] crate::services::activity::claude_settings::IntegrationError),
+    /// The shortcut is invalid or couldn't be registered (user-facing text).
+    #[error("{0}")]
+    Shortcut(String),
     #[error(transparent)]
     Tauri(#[from] tauri::Error),
 }
@@ -39,8 +42,16 @@ impl IslandyError {
             Self::Media(e) => e.kind(),
             Self::System(e) => e.kind(),
             Self::Integration(e) => e.kind(),
+            Self::Shortcut(_) => "shortcut",
             Self::Tauri(_) => "internal",
         }
+    }
+}
+
+impl IslandyError {
+    /// The error's kind, for diagnostics (no message text).
+    pub fn kind_name(&self) -> &'static str {
+        self.kind()
     }
 }
 
@@ -50,6 +61,12 @@ impl Serialize for IslandyError {
         s.serialize_field("kind", self.kind())?;
         s.serialize_field("message", &self.to_string())?;
         s.end()
+    }
+}
+
+impl From<std::io::Error> for IslandyError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Platform(e.to_string())
     }
 }
 

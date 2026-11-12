@@ -230,8 +230,9 @@ impl WindowsBackend {
         let tokens = self
             .subscribe(&session, id)
             .inspect_err(|e| {
-                eprintln!(
-                    "[islandy] media: subscribing to session events failed: {}",
+                crate::log_warn!(
+                    "media",
+                    "media: subscribing to session events failed: {}",
                     platform(e.clone())
                 )
             })
@@ -375,7 +376,7 @@ impl Backend for WindowsBackend {
         };
         let thumbnail = match props.Thumbnail() {
             Ok(reference) => read_thumbnail(&reference)
-                .inspect_err(|e| eprintln!("[islandy] media: reading artwork failed: {e}"))
+                .inspect_err(|e| crate::log_warn!("media", "media: reading artwork failed: {e}"))
                 .ok(),
             Err(_) => None, // no thumbnail (null reference)
         };

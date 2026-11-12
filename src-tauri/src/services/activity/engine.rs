@@ -26,7 +26,8 @@ use std::collections::{HashMap, VecDeque};
 use super::{
     model::{
         ActivityEvent, ActivitySettings, ActivitySnapshot, ActivitySource, ClaudeSession,
-        EventKind, Lifecycle, PeekRequest, Priority, ReceiverStatus, SessionStatus, Severity,
+        EventKind, LastReceived, Lifecycle, PeekRequest, Priority, ReceiverStatus, SessionStatus,
+        Severity,
     },
     protocol::{
         ClaudeHook, ClaudeWire, DeveloperEvent, DeveloperWire, NotificationKind, StopError,
@@ -40,7 +41,15 @@ const HOUR: u64 = 60 * MINUTE;
 
 /// History bounds.
 pub const MAX_EVENTS: usize = 300;
-pub const RETENTION_MS: u64 = 7 * 24 * HOUR;
+/// Default retention (the user can choose 1–30 days).
+#[cfg(test)]
+pub const RETENTION_MS: u64 = 7 * DAY;
+pub const DAY: u64 = 24 * HOUR;
+/// At most this many peeks per source per [`PEEK_WINDOW_MS`] (P0 requests
+/// for the user's attention are exempt), so one noisy integration can't
+/// dominate the island. Events are still recorded.
+pub const PEEK_BUDGET: usize = 4;
+pub const PEEK_WINDOW_MS: u64 = 60_000;
 /// Events included in a UI snapshot (newest first).
 pub const SNAPSHOT_EVENTS: usize = 60;
 pub const MAX_SESSIONS: usize = 12;
@@ -159,17 +168,22 @@ pub struct ActivityEngine {
     dedupe: HashMap<String, u64>,
     /// Developer task key → newest client timestamp seen (ordering).
     task_clock: HashMap<String, u64>,
+    /// Recent peek times per source (rate limiting).
+    peek_log: HashMap<ActivitySource, VecDeque<u64>>,
+    last_received: LastReceived,
     next_id: u64,
 }
 
 impl ActivityEngine {
     pub fn new(settings: ActivitySettings, now: u64) -> Self {
         Self {
-            settings,
+            settings: settings.normalized(),
             sessions: Vec::new(),
             events: VecDeque::new(),
             dedupe: HashMap::new(),
             task_clock: HashMap::new(),
+            peek_log: HashMap::new(),
+            last_received: LastReceived::default(),
             next_id: now << 10,
         }
     }
@@ -226,6 +240,7 @@ impl ActivityEngine {
             settings: self.settings,
             receiver,
             history_error,
+            last_received: self.last_received,
         }
     }
 
@@ -238,6 +253,13 @@ impl ActivityEngine {
         if !self.settings.sources.get(source) {
             return Outcome::default();
         }
+        // Tool events change nothing visible but are worth showing as
+        // "last event received" (no snapshot is published just for this).
+        match source {
+            ActivitySource::ClaudeCode => self.last_received.claude_code = Some(now),
+            ActivitySource::Developer => self.last_received.developer = Some(now),
+            ActivitySource::System => {}
+        }
         let mut outcome = match input {
             Input::Claude(e) => self.claude(e, now),
             Input::Developer(e) => self.developer(e, now),
@@ -246,10 +268,46 @@ impl ActivityEngine {
         if outcome.persist {
             self.enforce_retention(now);
         }
-        if self.settings.quiet {
-            outcome.peek = None;
-        }
+        outcome.peek = outcome.peek.and_then(|p| self.allow_peek(source, p, now));
         outcome
+    }
+
+    /// Applies the notification preferences and the per-source rate limit
+    /// to a peek request. The event itself is recorded either way.
+    fn allow_peek(
+        &mut self,
+        source: ActivitySource,
+        mut peek: PeekRequest,
+        now: u64,
+    ) -> Option<PeekRequest> {
+        let s = self.settings;
+        if s.quiet || !s.peeks.source(source) {
+            return None;
+        }
+        match peek.event.severity {
+            Severity::Success if !s.peeks.success => return None,
+            Severity::Error | Severity::Warning if !s.peeks.errors => return None,
+            _ => {}
+        }
+        if peek.event.priority != Priority::P0 {
+            let log = self.peek_log.entry(source).or_default();
+            while log
+                .front()
+                .is_some_and(|&t| now.saturating_sub(t) >= PEEK_WINDOW_MS)
+            {
+                log.pop_front();
+            }
+            if log.len() >= PEEK_BUDGET {
+                return None;
+            }
+            log.push_back(now);
+        }
+        peek.dwell_ms = s.peek_duration.scale(peek.dwell_ms);
+        Some(peek)
+    }
+
+    fn retention_ms(&self) -> u64 {
+        u64::from(self.settings.retention_days.max(1)) * DAY
     }
 
     /* ------------------------------------------------------------------ */
@@ -340,7 +398,7 @@ impl ActivityEngine {
     }
 
     fn enforce_retention(&mut self, now: u64) {
-        let cutoff = now.saturating_sub(RETENTION_MS);
+        let cutoff = now.saturating_sub(self.retention_ms());
         while self.events.front().is_some_and(|e| e.timestamp < cutoff) {
             self.events.pop_front();
         }
@@ -927,7 +985,10 @@ impl ActivityEngine {
             Lifecycle::Active => e.expires_at,
             _ => None,
         });
-        let retention = self.events.front().map(|e| e.timestamp + RETENTION_MS + 1);
+        let retention = self
+            .events
+            .front()
+            .map(|e| e.timestamp + self.retention_ms() + 1);
         let sessions = self.sessions.iter().flat_map(|s| {
             let stale = (s.status == SessionStatus::Working && !s.stale)
                 .then_some(s.last_seen_at + STALE_AFTER_MS);
@@ -984,6 +1045,33 @@ impl ActivityEngine {
         Outcome {
             changed,
             persist: changed,
+            peek: None,
+        }
+    }
+
+    /// Replaces all activity settings at once (settings window). Sources
+    /// that are switched off behave like [`Self::set_source`]; a shorter
+    /// retention applies immediately.
+    pub fn apply_settings(&mut self, next: ActivitySettings, now: u64) -> Outcome {
+        let next = next.normalized();
+        let previous = self.settings;
+        if previous == next {
+            return Outcome::default();
+        }
+        for source in [
+            ActivitySource::ClaudeCode,
+            ActivitySource::Developer,
+            ActivitySource::System,
+        ] {
+            if previous.sources.get(source) != next.sources.get(source) {
+                self.set_source(source, next.sources.get(source));
+            }
+        }
+        self.settings = next;
+        self.enforce_retention(now);
+        Outcome {
+            changed: true,
+            persist: true,
             peek: None,
         }
     }

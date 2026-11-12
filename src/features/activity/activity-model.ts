@@ -16,14 +16,16 @@ import type {
   ToolCategory,
 } from "../../services/types";
 import type { PeekContent, PeekIcon, StatusTone } from "../island/island-store";
+import { DEFAULT_ACTIVITY_SETTINGS } from "../settings/defaults";
 
 export const EMPTY_ACTIVITY: ActivitySnapshot = {
   revision: 0,
   sessions: [],
   events: [],
-  settings: { quiet: false, sources: { claudeCode: true, developer: true, system: true } },
+  settings: DEFAULT_ACTIVITY_SETTINGS,
   receiver: "starting",
   historyError: false,
+  lastReceived: { claudeCode: null, developer: null },
 };
 
 /* ------------------------------------------------------------------------ */

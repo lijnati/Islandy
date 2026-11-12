@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronUp, Moon, Pin, PinOff } from "lucide-react";
+import { ChevronLeft, ChevronUp, Moon, Pin, PinOff, Settings2 } from "lucide-react";
 
 import { activityStore, useActivity } from "../../features/activity/activity-store";
 
@@ -6,6 +6,7 @@ import { dispatchIsland, useIsland, type WidgetId } from "../../features/island/
 import { formatShortDate, formatTime } from "../../features/island/format";
 import { useNativeStatus } from "../../features/island/native-status";
 import { useNow } from "../../hooks/useNow";
+import { isNativeAvailable, openSettingsWindow } from "../../services/native";
 import { IconButton } from "../ui/IconButton";
 import { QuickControls } from "./QuickControls";
 
@@ -83,6 +84,18 @@ export function IslandToolbar() {
             activityStore.getState().setQuiet(!quiet);
           }}
         />
+        {isNativeAvailable() && (
+          <IconButton
+            icon={Settings2}
+            label="Open Islandy settings"
+            tooltip="Settings"
+            onClick={() => {
+              openSettingsWindow().catch((error: unknown) => {
+                console.warn("[islandy] open_settings_window failed:", error);
+              });
+            }}
+          />
+        )}
         <IconButton
           icon={pinned ? PinOff : Pin}
           label={pinned ? "Unpin dashboard" : "Pin dashboard open"}

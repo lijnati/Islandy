@@ -3,6 +3,7 @@ import { Moon, Sparkle } from "lucide-react";
 import { ambientLabel, needsAttention, type Ambient } from "../../features/activity/activity-model";
 import { useAmbient, useQuiet } from "../../features/activity/use-ambient";
 import { dispatchIsland } from "../../features/island/island-store";
+import { useDragReposition } from "../../features/island/use-drag-reposition";
 import { formatTime } from "../../features/island/format";
 import { displayTitle, isActive, isPlaying } from "../../features/media/media-model";
 import { useSelectedSession } from "../../features/media/media-store";
@@ -75,6 +76,7 @@ export function CollapsedIsland() {
   const session = useSelectedSession();
   const ambient = useAmbient();
   const quiet = useQuiet();
+  const { handlers, consumeDragClick } = useDragReposition();
   const media = isActive(session) ? session : null;
   const playing = isPlaying(media);
   const time = formatTime(now);
@@ -98,8 +100,10 @@ export function CollapsedIsland() {
     <button
       type="button"
       onClick={() => {
+        if (consumeDragClick()) return;
         dispatchIsland({ type: "PRESS" });
       }}
+      {...handlers}
       aria-label={label}
       className={cx(
         "group/pill flex h-full w-full items-center justify-between rounded-full",

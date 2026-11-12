@@ -141,7 +141,7 @@ pub fn now_ms() -> u64 {
 }
 
 fn log_error(context: &str, error: &MediaError) {
-    eprintln!("[islandy] media: {context}: {error}");
+    crate::log_warn!("media", "media: {context}: {error}");
 }
 
 struct Worker<B, F> {
@@ -407,7 +407,7 @@ where
                 let result = worker.handle(request);
                 if let Err(e) = &result {
                     #[cfg(debug_assertions)]
-                    eprintln!("[islandy] media request {request:?} failed: {e}");
+                    crate::log_warn!("media", "media request {request:?} failed: {e}");
                     #[cfg(not(debug_assertions))]
                     let _ = e;
                 }

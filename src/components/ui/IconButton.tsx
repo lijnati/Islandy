@@ -58,7 +58,7 @@ export function IconButton({
           s.box,
           focusRing,
           variant === "solid"
-            ? "bg-fg text-surface shadow-control hover:bg-accent active:scale-95"
+            ? "bg-accent text-on-accent shadow-control hover:bg-accent/90 active:scale-95"
             : "text-fg-muted hover:bg-surface-hover hover:text-fg active:scale-95",
           pressed && variant === "ghost" && "bg-surface-raised text-fg",
           busy && "opacity-60",

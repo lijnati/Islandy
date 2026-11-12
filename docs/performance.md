@@ -134,3 +134,20 @@ How Phase 4 stays light:
   elapsed timer ticks per second only while the Claude Code view shows a working session.
 
 Windows measurements (WebView2, release build) are still to do, following the procedure below.
+
+## Phase 5 measurements (Linux dev host, release build, Xvfb; not Windows)
+
+| Measure                                     | Result                                                          |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| Idle CPU, collapsed (all Islandy processes) | 7–10 ticks per 30 s (≈ 0.2–0.3 % of one core)                   |
+| Dashboard open, pointer resting             | 5 ticks per 20 s                                                |
+| Start → local receiver ready                | ≈ 1.25 s (release build)                                        |
+| Main process RSS                            | 150–162 MB (≈ 36 MB anonymous; the rest is shared libraries)    |
+| WebKitGTK web process RSS                   | 262–378 MB (software rendering; not representative of WebView2) |
+| `islandy uninstall-cleanup`                 | 42 ms                                                           |
+
+The 100 MB idle-memory target was **not demonstrated**: the WebView dominates, and WebView2 on
+Windows must be measured before any claim. Phase 5 added one periodic task: a 2 s watcher for
+monitor changes and fullscreen apps (a few Win32 calls each). The settings window exists only
+while open and polls native snapshots every 3–5 s only on pages that show them. Settings writes
+happen on change (sliders commit on release), not per pixel.

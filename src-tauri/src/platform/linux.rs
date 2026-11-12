@@ -36,3 +36,47 @@ pub fn set_window_shape<R: Runtime>(window: &WebviewWindow<R>, region: PhysicalR
     gtk_window.input_shape_combine_region(Some(&shape));
     Ok(())
 }
+
+/* Launch at sign-in on the development host: an XDG autostart entry. */
+
+fn autostart_file(name: &str) -> Option<std::path::PathBuf> {
+    let config = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config"))
+        })?;
+    Some(
+        config
+            .join("autostart")
+            .join(format!("{}.desktop", name.to_lowercase())),
+    )
+}
+
+pub fn startup_command(name: &str) -> Option<String> {
+    let text = std::fs::read_to_string(autostart_file(name)?).ok()?;
+    text.lines()
+        .find_map(|l| l.strip_prefix("Exec="))
+        .map(str::to_owned)
+}
+
+pub fn set_startup_command(name: &str, command: &str) -> Result<()> {
+    let file = autostart_file(name).ok_or(crate::error::IslandyError::Unsupported(
+        "no configuration directory",
+    ))?;
+    let platform = |e: std::io::Error| crate::error::IslandyError::Platform(e.to_string());
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(platform)?;
+    }
+    let entry = format!("[Desktop Entry]\nType=Application\nName={name}\nExec={command}\nX-GNOME-Autostart-enabled=true\n");
+    crate::services::paths::write_atomic(&file, entry.as_bytes()).map_err(platform)
+}
+
+pub fn remove_startup_command(name: &str) -> Result<()> {
+    match autostart_file(name).map(std::fs::remove_file) {
+        Some(Err(e)) if e.kind() != std::io::ErrorKind::NotFound => {
+            Err(crate::error::IslandyError::Platform(e.to_string()))
+        }
+        _ => Ok(()),
+    }
+}

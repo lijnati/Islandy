@@ -68,8 +68,9 @@ impl MediaHub {
             return;
         }
         #[cfg(debug_assertions)]
-        eprintln!(
-            "[islandy] media snapshot r{} ({:?}, {} sessions, selected {:?})",
+        crate::log_debug!(
+            "media",
+            "media snapshot r{} ({:?}, {} sessions, selected {:?})",
             snapshot.revision,
             snapshot.status,
             snapshot.sessions.len(),
@@ -77,7 +78,7 @@ impl MediaHub {
         );
         if let Some(channel) = inner.channel.as_ref() {
             if let Err(e) = channel.send(snapshot.clone()) {
-                eprintln!("[islandy] failed to deliver media snapshot: {e}");
+                crate::log_warn!("media", "failed to deliver media snapshot: {e}");
             }
         }
         inner.latest = snapshot;

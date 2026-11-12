@@ -1,7 +1,8 @@
 fn main() {
     // Declaring the app's commands in an app manifest makes Tauri generate
     // `allow-*`/`deny-*` permissions for them. Commands are then *denied*
-    // unless a capability grants them (see capabilities/island.json).
+    // unless a capability grants them (see capabilities/island.json and
+    // capabilities/settings.json: each window gets only what it uses).
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "get_app_info",
@@ -32,6 +33,22 @@ fn main() {
             "get_claude_integration",
             "install_claude_integration",
             "remove_claude_integration",
+            "set_activity_settings",
+            "test_local_receiver",
+            "connect_settings",
+            "update_settings",
+            "reset_settings",
+            "set_toggle_shortcut",
+            "get_shortcut_status",
+            "get_startup_status",
+            "set_launch_at_login",
+            "list_monitors",
+            "preview_island_offset",
+            "set_island_visible",
+            "open_settings_window",
+            "open_islandy_folder",
+            "get_storage_info",
+            "get_diagnostics",
         ]),
     ))
     .expect("failed to run tauri-build");

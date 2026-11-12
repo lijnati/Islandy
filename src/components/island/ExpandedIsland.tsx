@@ -1,8 +1,12 @@
 import { AnimatePresence, motion as m } from "motion/react";
 import { useEffect, useRef, type PointerEvent } from "react";
 
-import { breakpoints, motion } from "../../design/tokens";
+import { motion } from "../../design/tokens";
 import { dispatchIsland, useIsland, type WidgetId } from "../../features/island/island-store";
+import { openSettingsWindow, isNativeAvailable } from "../../services/native";
+import type { DashboardWidgetId } from "../../services/types";
+import { useSettings } from "../../features/settings/settings-store";
+import { fitWidgets, WIDGETS } from "../../features/widgets/registry";
 import { AudioPanel } from "../system/AudioPanel";
 import { BluetoothPanel } from "../system/BluetoothPanel";
 import { DisplayPanel } from "../system/DisplayPanel";
@@ -12,8 +16,10 @@ import { ActivityCenter } from "../activity/ActivityCenter";
 import { ActivityWidget } from "../activity/ActivityWidget";
 import { ClaudePanel } from "../activity/ClaudePanel";
 import { IntegrationsPanel } from "../activity/IntegrationsPanel";
+import { AudioWidget } from "../widgets/AudioWidget";
 import { CalendarDetail, CalendarWidget } from "../widgets/CalendarWidget";
 import { MediaDetail, MediaWidget } from "../widgets/MediaWidget";
+import { SystemWidget } from "../widgets/SystemWidget";
 import { IslandToolbar } from "./IslandToolbar";
 
 const DETAILS: Record<WidgetId, () => React.JSX.Element> = {
@@ -29,6 +35,35 @@ const DETAILS: Record<WidgetId, () => React.JSX.Element> = {
   bluetooth: BluetoothPanel,
   display: DisplayPanel,
 };
+
+/** Dashboard widget components, by registry id. */
+const WIDGET_COMPONENTS: Record<
+  DashboardWidgetId,
+  (props: { className?: string }) => React.JSX.Element
+> = {
+  media: MediaWidget,
+  calendar: CalendarWidget,
+  activity: ActivityWidget,
+  system: SystemWidget,
+  audio: AudioWidget,
+};
+
+function NoWidgets() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 rounded-tile border border-dashed border-hairline text-center">
+      <p className="text-body text-fg-muted">No widgets are turned on.</p>
+      {isNativeAvailable() && (
+        <button
+          type="button"
+          onClick={() => void openSettingsWindow("widgets")}
+          className="rounded-full border border-hairline px-3 py-1 text-caption font-medium text-fg-muted transition-colors duration-fast hover:bg-surface-hover hover:text-fg"
+        >
+          Choose widgets
+        </button>
+      )}
+    </div>
+  );
+}
 
 /** Clicking empty dashboard space (not a control) pins it open. */
 function pinOnBackgroundPress(event: PointerEvent<HTMLElement>) {
@@ -62,8 +97,8 @@ export function ExpandedIsland({ width, reduceMotion }: { width: number; reduceM
     }
   }, [pinned]);
 
-  const showActivity = width >= breakpoints.hideActivity;
-  const showCalendar = width >= breakpoints.hideCalendar;
+  const items = useSettings((s) => s.widgets.items);
+  const shown = fitWidgets(items, width);
   const Detail = activeWidget ? DETAILS[activeWidget] : null;
 
   return (
@@ -99,18 +134,29 @@ export function ExpandedIsland({ width, reduceMotion }: { width: number; reduceM
               exit={{ opacity: 0, transition: motion.contentOut }}
               transition={motion.contentIn}
             >
-              <m.div className="flex min-w-0 flex-[1.6]" {...enter(1, reduceMotion)}>
-                <MediaWidget className="flex-1" />
-              </m.div>
-              {showCalendar && (
-                <m.div className="flex w-[204px] shrink-0" {...enter(2, reduceMotion)}>
-                  <CalendarWidget className="flex-1" />
+              {shown.length === 0 ? (
+                <m.div className="flex-1" {...enter(1, reduceMotion)}>
+                  <NoWidgets />
                 </m.div>
-              )}
-              {showActivity && (
-                <m.div className="flex min-w-0 flex-1" {...enter(3, reduceMotion)}>
-                  <ActivityWidget className="flex-1" />
-                </m.div>
+              ) : (
+                shown.map((id, i) => {
+                  const def = WIDGETS[id];
+                  const Widget = WIDGET_COMPONENTS[id];
+                  return (
+                    <m.div
+                      key={id}
+                      className={def.layout.kind === "fixed" ? "flex shrink-0" : "flex min-w-0"}
+                      style={
+                        def.layout.kind === "fixed"
+                          ? { width: def.minWidth }
+                          : { flex: `${def.layout.grow} 1 0`, minWidth: def.minWidth }
+                      }
+                      {...enter(i + 1, reduceMotion)}
+                    >
+                      <Widget className="flex-1" />
+                    </m.div>
+                  );
+                })
               )}
             </m.div>
           )}

@@ -30,7 +30,8 @@ export type NativeErrorKind =
   | "notFound"
   | "rejected"
   | "timeout"
-  | "denied";
+  | "denied"
+  | "shortcut";
 
 export interface NativeErrorPayload {
   kind: NativeErrorKind;
@@ -50,7 +51,12 @@ export interface IslandLayouts {
   ambient: Size;
   peek: Size;
   expanded: Size;
+  /** How the surface is aligned in the window (follows the anchor). */
+  align?: SurfaceAlign;
 }
+
+/** Mirrors `geometry::Align`. */
+export type SurfaceAlign = "start" | "center" | "end";
 
 /** Mirrors `shortcut::ShortcutStatus`. */
 export interface ShortcutStatus {
@@ -66,11 +72,19 @@ export type FrameStrategy = "region" | "resize";
 export interface IslandConnection {
   shortcut: ShortcutStatus;
   frameStrategy: FrameStrategy;
+  /** First launch: show a one-time hint. */
+  firstRun: boolean;
 }
 
 /** Rust → frontend push messages. Mirrors `signals::IslandSignal`. */
 export type IslandSignal =
-  { type: "toggle" } | { type: "focusLost" } | { type: "layoutsChanged" } | { type: "demoPeek" };
+  | { type: "toggle" }
+  | { type: "focusLost" }
+  | { type: "layoutsChanged" }
+  /** Tray left click: open the dashboard. */
+  | { type: "open" }
+  /** The island is being hidden (tray, fullscreen app): collapse. */
+  | { type: "hidden" };
 
 /** Windows Settings pages Islandy may open. Mirrors `system::settings::SettingsPage`. */
 export type SettingsPage =
@@ -368,9 +382,31 @@ export interface SourceToggles {
   system: boolean;
 }
 
+/** Which recorded events may also peek. Mirrors `model::PeekToggles`. */
+export interface PeekToggles {
+  claudeCode: boolean;
+  developer: boolean;
+  system: boolean;
+  media: boolean;
+  success: boolean;
+  errors: boolean;
+}
+
+export type PeekDuration = "short" | "standard" | "long";
+
 export interface ActivitySettings {
   quiet: boolean;
+  /** Sources Islandy records at all. */
   sources: SourceToggles;
+  peeks: PeekToggles;
+  peekDuration: PeekDuration;
+  /** 1–30 days. */
+  retentionDays: number;
+}
+
+export interface LastReceived {
+  claudeCode: number | null;
+  developer: number | null;
 }
 
 export type ReceiverStatus = "starting" | "listening" | "unavailable";
@@ -383,6 +419,7 @@ export interface ActivitySnapshot {
   settings: ActivitySettings;
   receiver: ReceiverStatus;
   historyError: boolean;
+  lastReceived: LastReceived;
 }
 
 export interface PeekRequest {
@@ -404,3 +441,129 @@ export interface ClaudeIntegration {
   /** The exact JSON Islandy adds. */
   snippet: string;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Settings, startup, diagnostics (Phase 5; mirrors services/settings,       */
+/* services/startup.rs, commands.rs)                                          */
+/* ------------------------------------------------------------------------ */
+
+export type Theme = "midnight" | "graphite" | "frost";
+export type Accent = "white" | "blue" | "violet" | "green" | "amber" | "coral";
+export type Corners = "standard" | "compact" | "round";
+export type AnimationLevel = "full" | "subtle";
+export type ReducedMotionSetting = "system" | "on" | "off";
+export type Anchor = "topCenter" | "topLeft" | "topRight";
+export type SizePreset = "standard" | "compact" | "comfortable";
+export type DashboardWidgetId = "media" | "calendar" | "activity" | "system" | "audio";
+
+export interface GeneralSettings {
+  toggleShortcut: string;
+  startHiddenAtLogin: boolean;
+  hideInFullscreen: boolean;
+  verboseLogging: boolean;
+}
+
+export interface AppearanceSettings {
+  theme: Theme;
+  accent: Accent;
+  /** 70–100 (%). */
+  opacity: number;
+  corners: Corners;
+  animation: AnimationLevel;
+  reducedMotion: ReducedMotionSetting;
+}
+
+export interface IslandSettings {
+  anchor: Anchor;
+  /** Logical px from the anchor. */
+  offsetX: number;
+  /** 0–48 logical px. */
+  topMargin: number;
+  /** `"primary"` or a monitor id from `listMonitors`. */
+  monitor: string;
+  size: SizePreset;
+  dragToReposition: boolean;
+}
+
+export interface InteractionSettings {
+  openOnHover: boolean;
+  /** 100–500 ms. */
+  hoverDelayMs: number;
+  openOnClick: boolean;
+  pinOnClick: boolean;
+  autoCollapse: boolean;
+  /** 200–1000 ms. */
+  collapseDelayMs: number;
+}
+
+export interface WidgetEntry {
+  id: DashboardWidgetId;
+  enabled: boolean;
+}
+
+export interface Settings {
+  version: number;
+  general: GeneralSettings;
+  appearance: AppearanceSettings;
+  island: IslandSettings;
+  interaction: InteractionSettings;
+  widgets: { items: WidgetEntry[] };
+}
+
+export type SettingsLoadStatus =
+  | { kind: "fresh" }
+  | { kind: "loaded" }
+  | { kind: "migrated"; from: number }
+  | { kind: "recovered" }
+  | { kind: "newer"; version: number };
+
+export interface SettingsState {
+  settings: Settings;
+  loadStatus: SettingsLoadStatus;
+  /** Saving failed: settings are kept in memory only. */
+  saveError: boolean;
+}
+
+/** Pages of the settings window. Mirrors `settings_window::SettingsPage`. */
+export type SettingsPageId =
+  | "general"
+  | "appearance"
+  | "island"
+  | "widgets"
+  | "integrations"
+  | "notifications"
+  | "privacy"
+  | "about";
+
+export type SettingsPush =
+  { type: "state"; state: SettingsState } | { type: "navigate"; page: SettingsPageId };
+
+export interface StartupStatus {
+  supported: boolean;
+  enabled: boolean;
+  /** Registered but switched off in Task Manager / Settings. */
+  disabledBySystem: boolean;
+}
+
+export interface MonitorInfo {
+  id: string;
+  label: string;
+  primary: boolean;
+  width: number;
+  height: number;
+  scale: number;
+  current: boolean;
+}
+
+export interface StoredFile {
+  name: string;
+  purpose: string;
+  bytes: number | null;
+}
+
+export interface StorageInfo {
+  dataDir: string | null;
+  files: StoredFile[];
+}
+
+export type IslandyFolder = "data" | "logs";

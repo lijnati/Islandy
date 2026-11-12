@@ -19,8 +19,10 @@ pub enum IslandSignal {
     FocusLost,
     /// Monitor geometry or scaling changed; re-fetch layouts.
     LayoutsChanged,
-    /// Tray → "Preview peek (demo)". Phase 1 demo only.
-    DemoPeek,
+    /// Open the dashboard (tray left click).
+    Open,
+    /// The island is being hidden (tray, fullscreen app): collapse.
+    Hidden,
 }
 
 #[derive(Default)]
@@ -35,7 +37,7 @@ impl SignalHub {
     fn send(&self, signal: IslandSignal) {
         if let Some(channel) = self.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
             if let Err(e) = channel.send(signal) {
-                eprintln!("[islandy] failed to deliver {signal:?}: {e}");
+                crate::log_warn!("signals", "failed to deliver {signal:?}: {e}");
             }
         }
     }
@@ -43,7 +45,7 @@ impl SignalHub {
 
 pub fn emit<R: Runtime>(app: &AppHandle<R>, signal: IslandSignal) {
     #[cfg(debug_assertions)]
-    eprintln!("[islandy] signal -> {signal:?}");
+    crate::log_warn!("signals", "signal -> {signal:?}");
     app.state::<SignalHub>().send(signal);
 }
 

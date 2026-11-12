@@ -48,8 +48,35 @@ pub fn main(args: &[OsString]) -> Option<i32> {
         "hook" => Some(hook()),
         "notify" => Some(notify(&rest)),
         "status" => Some(status()),
+        "uninstall-cleanup" => Some(uninstall_cleanup()),
         _ => None,
     }
+}
+
+/// Run by the uninstaller (not on updates): removes what Islandy added
+/// outside its own folders. Islandy's hooks are removed from the user-level
+/// Claude Code settings (with a backup; other hooks untouched) and the
+/// sign-in entry is deleted. Prints nothing and always exits 0, so a problem
+/// here never blocks uninstalling.
+fn uninstall_cleanup() -> i32 {
+    use crate::services::{
+        activity::{claude_settings, now_ms},
+        startup,
+    };
+    if let (Ok(exe), Some(location)) = (std::env::current_exe(), claude_settings::Location::user())
+    {
+        let command = claude_settings::hook_command(&exe);
+        let state = claude_settings::status(Some(&location), &command).state;
+        if matches!(
+            state,
+            claude_settings::IntegrationState::Installed
+                | claude_settings::IntegrationState::NeedsUpdate
+        ) {
+            let _ = claude_settings::remove(&location, &command, now_ms());
+        }
+    }
+    let _ = crate::platform::remove_startup_command(startup::ENTRY_NAME);
+    0
 }
 
 /* -------------------------------------------------------------------------- */
