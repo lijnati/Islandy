@@ -33,15 +33,19 @@ center. The goal is for it to feel like part of the operating system, not a thir
 
 ## Core interactions
 
-| State       | Trigger                                       | Ends when                                   |
-| ----------- | --------------------------------------------- | ------------------------------------------- |
-| `collapsed` | Default / resting                             | n/a                                         |
-| `peek`      | A contextual event (track change, agent done) | Dwell timeout (~4 s), or the user interacts |
-| `expanded`  | Pointer hover (with intent delay)             | Pointer leaves                              |
-| `focused`   | Click                                         | Escape, click-away, or focus loss           |
+| State       | Trigger                                           | Ends when                                       |
+| ----------- | ------------------------------------------------- | ----------------------------------------------- |
+| `collapsed` | Default / resting                                 | n/a                                             |
+| `peek`      | A contextual event (track change, agent done)     | Dwell timeout (~4 s), or the user interacts     |
+| `expanded`  | Hover (150 ms intent), click, or `Ctrl+Alt+Space` | Pointer leaves (360 ms) unless pinned; Escape   |
+| `focused`   | Opening a widget's detail view                    | Back / Escape (to `expanded`), or click outside |
 
-Rules: the user always wins over automatic behavior; automatic events never interrupt an
-expanded or focused island; only one transition animates at a time.
+Clicking the island **pins** it: it stays open until Escape, the collapse button, a click
+outside, or the shortcut. Rules: the user always wins over automatic behavior; automatic
+events never interrupt the dashboard; only one transition animates at a time.
+
+Quick controls are honest: in Phase 1 they open the matching Windows Settings page; real
+toggles come in Phase 3.
 
 ## Non-goals
 

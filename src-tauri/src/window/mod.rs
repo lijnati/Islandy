@@ -4,4 +4,4 @@
 pub mod geometry;
 mod manager;
 
-pub use manager::IslandWindow;
+pub use manager::{FrameStrategy, IslandWindow, WindowState};

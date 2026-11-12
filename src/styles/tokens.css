@@ -10,17 +10,25 @@
   /* Reset Tailwind's default palette so only Islandy tokens exist. */
   --color-*: initial;
 
-  /* Colors — premium dark minimalism. No saturated accents by default. */
+  /* Colors — neo-Swiss dark minimalism. Accents are reserved for status. */
   --color-transparent: transparent;
   --color-surface: #080808; /* island body */
+  --color-surface-secondary: #171717; /* widget cards */
+  --color-surface-elevated: #222222; /* controls, tooltips */
   --color-surface-raised: rgb(255 255 255 / 0.06); /* translucent secondary surface */
   --color-surface-hover: rgb(255 255 255 / 0.1);
   --color-fg: #f5f5f5; /* primary text */
   --color-fg-muted: #909090; /* secondary text */
   --color-fg-subtle: #5c5c5c; /* tertiary / disabled */
-  --color-hairline: rgb(255 255 255 / 0.08); /* island border */
-  --color-hairline-strong: rgb(255 255 255 / 0.14);
-  --color-signal: #34c759; /* reserved: live/active indicator, use sparingly */
+  --color-hairline: rgb(255 255 255 / 0.08); /* borders */
+  --color-hairline-strong: rgb(255 255 255 / 0.16);
+  --color-accent: #ffffff;
+  --color-focus: rgb(255 255 255 / 0.72); /* keyboard focus ring */
+  /* Status — restrained, used only for small indicators. */
+  --color-status-neutral: #909090;
+  --color-status-working: #e8b44c;
+  --color-status-success: #5bd08a;
+  --color-status-attention: #ff7a5c;
 
   /* Typography */
   --font-sans:
@@ -32,22 +40,35 @@
   --text-body--line-height: 16px;
   --text-title: 15px;
   --text-title--line-height: 20px;
+  --text-heading: 20px;
+  --text-heading--line-height: 24px;
+  --text-display: 40px;
+  --text-display--line-height: 40px;
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --tracking-tight: -0.01em;
+  --tracking-display: -0.03em;
+  --tracking-label: 0.06em;
 
   /* Radii — the collapsed island is a full pill. */
   --radius-island: 9999px;
-  --radius-panel: 28px; /* expanded dashboard (Phase 1) */
+  --radius-panel: 30px; /* expanded dashboard; mirrors radius.panel in tokens.ts */
   --radius-tile: 18px; /* widgets inside the dashboard */
+  --radius-art: 12px; /* album artwork */
   --radius-control: 10px;
 
   /* Spacing — 4px grid. Tailwind's numeric scale derives from this. */
   --spacing: 4px;
 
-  /* Shadows — only for expanded surfaces; the collapsed pill has none. */
-  --shadow-panel: 0 12px 32px rgb(0 0 0 / 0.35);
+  /*
+   * Shadows. The island itself casts no outer shadow: that would need a
+   * transparent margin around it, i.e. an invisible click-blocking band.
+   * Depth comes from a hairline border and an inner top highlight instead.
+   */
+  --shadow-surface: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --shadow-art: 0 6px 16px rgb(0 0 0 / 0.45);
+  --shadow-control: 0 1px 2px rgb(0 0 0 / 0.4);
 
   /* Motion */
   --duration-fast: 120ms;
@@ -55,6 +76,19 @@
   --duration-slow: 360ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.3, 0, 0, 1.15);
+
+  /* Activity indicator bars */
+  --animate-bar: island-bar 1.1s ease-in-out infinite;
+
+  @keyframes island-bar {
+    0%,
+    100% {
+      transform: scaleY(0.35);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
 }
 
 /*

@@ -19,22 +19,35 @@ Windows 11 machine, including at least one non-100 % scaling setting and a multi
 **Exit gate still open:** run the Windows verification checklist in `README.md` and record the
 results.
 
-## Phase 1: The island experience
+## Phase 1: The island experience ✅ (Windows runtime verification pending)
 
-- Install Motion and Lucide. Expand, collapse, and peek animations driven by the state model.
-- Window resize presets (`PEEK`, `EXPANDED`) via `IslandWindow::apply_size`, with an atomic
-  `SetWindowPos` helper and a grow-then-animate / animate-then-shrink sequence.
-- Hover intent delay, click-to-focus, Escape and click-away to dismiss. Toggle focusable only
-  in `focused` mode and re-apply `WS_EX_TOOLWINDOW`.
-- Expanded dashboard shell (layout and tiles) with the date widget (local).
-- Display-change handling (`WM_DISPLAYCHANGE`, work-area changes) and repositioning.
-- Single-instance enforcement; start with Windows (opt-in).
-- Windows benchmark pass (see `performance.md`).
+- Motion and Lucide installed. Expand, collapse and peek animations (springs) driven by the
+  state machine; reduced-motion support.
+- Window frame coordinator: fixed native canvas + window region (`SetWindowRgn`), with a
+  resize fallback using one atomic `SetWindowPos`. Grow-then-animate / animate-then-shrink.
+- Monitor-fitted layouts (collapsed, peek, expanded) computed in Rust, DPI-aware, centered,
+  top-anchored, clamped to the work area; re-read on every grow and on DPI changes.
+- State machine: hover intent, delayed leave-collapse, click-to-pin, widget detail views,
+  Escape, click-outside (focus loss), peeks with stale-timer protection. Timers derived from
+  state.
+- Focus: non-activating by default; focusable only after a click/shortcut; previous
+  foreground window restored on keyboard dismiss.
+- Global shortcut `Ctrl+Alt+Space` (official plugin, Rust-side only), conflict reported.
+- Dashboard: toolbar with time/date and honest quick controls (open Windows Settings pages),
+  media (demo), real calendar with month navigation, activity (demo).
+- Accessibility basics: labels, visible focus rings, keyboard navigation, live regions.
+
+**Exit gate still open:** run the Windows checklist in `README.md`.
+
+**Moved to later phases:** display-change events beyond lazy re-fit (`WM_DISPLAYCHANGE`),
+single-instance enforcement and start-with-Windows (Phase 5), Windows benchmark pass
+(before Phase 2 sign-off).
 
 ## Phase 2: Media and audio
 
-- GSMTC service: now playing, artwork, play/pause/next/previous, progress interpolation.
-- Peek on track change.
+- GSMTC service replacing `src/features/media/demo-media.ts` (same shape: track, playing,
+  position + timestamp): now playing, artwork, play/pause/next/previous.
+- Peek on track change (the demo already does this through the same `CONTEXT_EVENT`).
 - Core Audio: volume and mute with change notifications; read-only output device list.
 
 ## Phase 3: System and context
@@ -52,7 +65,8 @@ results.
 
 ## Phase 5: Polish and release
 
-- Settings surface (minimal), light accessibility pass (screen reader labels, reduced motion).
+- Settings surface (minimal: shortcut, top offset), accessibility audit with a screen reader.
+- Single instance; start with Windows (opt-in).
 - Final identifier, icon, and branding; code signing; signed updater.
 - Optional: ICS calendar subscription; MSIX packaging evaluation (would enable notification
   listener and appointments APIs).

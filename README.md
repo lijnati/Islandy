@@ -9,23 +9,33 @@ idle cost, fully local.
 
 ## Status
 
-**Phase 0 — Foundation.** What exists today:
+**Phase 1: Dynamic island experience.** What exists today:
 
-- A borderless, transparent, always-on-top window with no taskbar entry, sized to the pill
-  (220 × 44 logical px) and centered at the top of the primary monitor's work area, DPI-aware.
-- A minimal pill showing the local time and short date, updated once per minute.
-- A typed Rust ↔ React IPC bridge (`get_app_info`), locked down by a least-privilege capability.
-- A Zustand store defining the island's state model (`collapsed`, `peek`, `expanded`, `focused`).
-  Only `collapsed` is rendered.
-- A tray icon with **Quit Islandy** (the island never takes focus, so this is how you quit).
+- A black pill at the top center of the primary monitor (time, ambient glyph, media
+  indicator) that expands with a spring animation into an ~820 × 248 dashboard on hover
+  (150 ms intent delay), click, or **Ctrl + Alt + Space**.
+- Dashboard: toolbar (time, date, quick controls, pin, collapse) and three widgets:
+  **media** (demo data), **calendar** (real, locale-aware, with month navigation), and
+  **activity** (demo data). Each widget has a detail view.
+- Interaction: hover-to-expand, delayed leave-collapse, click-to-pin, Escape, click outside
+  (focus loss), peeks for contextual events (tray → _Preview peek (demo)_).
+- Native frame coordination: the window is a fixed canvas and a window region limits drawing
+  and clicks to the visible island, so nothing invisible blocks the desktop. Layouts are fitted
+  to the monitor (DPI-aware, narrower on small screens).
+- Quick controls open the Windows Settings page for Wi-Fi, Bluetooth, sound and display; they
+  do not pretend to toggle anything. Islandy settings are marked "coming soon".
 
-Not built yet: expansion/animation, widgets, media, audio, calendar, settings, autostart,
+**Demo data.** The media and activity widgets show local sample data, labelled _Demo_. They
+are not connected to Windows media sessions (Phase 2) or Claude Code (Phase 4).
+
+Not built yet: real media/audio, system widgets, settings, autostart, single instance,
 fullscreen handling. See [docs/roadmap.md](docs/roadmap.md).
 
-> **Verification note.** Phase 0 was developed on a Linux host. The Windows code paths compile
-> and pass `clippy` for `x86_64-pc-windows-msvc`, but Windows-native runtime behavior (WebView2
-> transparency, `WS_EX_NOACTIVATE`/`WS_EX_TOOLWINDOW`, Alt+Tab, DPI on real monitors) has **not**
-> yet been verified on a Windows machine. See [Known limitations](#known-limitations).
+> **Verification note.** Islandy was developed on a Linux host. The Windows code paths compile
+> and pass `clippy` for `x86_64-pc-windows-msvc`, and a Windows installer cross-builds, but
+> Windows-native runtime behavior (WebView2 transparency and window regions, focus handling,
+> Alt+Tab, the global shortcut, Settings pages, DPI on real monitors) has **not** been verified
+> on a Windows machine. See the checklist below.
 
 ## Tech stack
 
@@ -39,9 +49,9 @@ fullscreen handling. See [docs/roadmap.md](docs/roadmap.md).
 | Tooling  | pnpm, ESLint 10 + typescript-eslint (strict, type-checked), Prettier     |
 | Tests    | Vitest + Testing Library (frontend), `cargo test` (Rust)                 |
 
-Motion and Lucide React are planned for Phase 1 (animation and icons). They are intentionally
-not installed yet because nothing in Phase 0 uses them. TypeScript is pinned to 6.0.x because
-typescript-eslint does not yet support TypeScript 7.
+Animation uses Motion (`motion/react`), icons use Lucide React, and the global shortcut uses
+the official `tauri-plugin-global-shortcut` (Rust side only). TypeScript is pinned to 6.0.x
+because typescript-eslint does not yet support TypeScript 7.
 
 ## Prerequisites (Windows)
 
@@ -67,6 +77,18 @@ pnpm install
 pnpm tauri dev      # run the desktop app with hot reload (starts Vite automatically)
 pnpm dev            # frontend only, in a browser (IPC calls fail gracefully)
 ```
+
+In the browser dev server, `window.__islandy.dispatch({ type: "CONTEXT_EVENT", peek: … })`
+drives the state machine (dev builds only), e.g. to preview a peek.
+
+### Configuration (environment variables, until a settings UI exists)
+
+| Variable                  | Default          | Effect                                                |
+| ------------------------- | ---------------- | ----------------------------------------------------- |
+| `ISLANDY_TOGGLE_SHORTCUT` | `Ctrl+Alt+Space` | Global toggle shortcut (e.g. `Ctrl+Shift+I`)          |
+| `ISLANDY_FRAME_STRATEGY`  | `region`         | `resize` resizes the window instead of using a region |
+
+The top offset (8 px) is `TOP_MARGIN` in `src-tauri/src/window/geometry.rs`.
 
 ## Check
 
@@ -94,17 +116,26 @@ The release binary is at `src-tauri/target/release/islandy.exe`, the installer u
 
 ```
 src/                      React frontend
-  features/island/        the island UI (Island, Clock, formatters)
-  hooks/                  useClock (minute-aligned), useAppInfo
+  components/island/      IslandRoot (animated surface), Collapsed/Peek/ExpandedIsland,
+                          IslandToolbar, QuickControls, ActivityBars, NowProvider
+  components/widgets/     Media, Calendar (+ MonthGrid), Activity (+ ActivityCard), details
+  components/ui/          IconButton, Tooltip, WidgetSurface, StatusIndicator
+  features/island/        island-store (state machine + timers), window-coordinator,
+                          layouts, useIslandFrame, useNativeBridge, native-status, format
+  features/calendar/      calendar math (pure, tested)
+  features/media/         demo media store (Phase 2 replaces it)
+  features/activity/      demo activity data (Phase 4 replaces it)
+  hooks/                  useClock (minute-aligned), useNow, usePrefersReducedMotion
   services/               native.ts: the only module that calls Rust; types.ts: IPC types
-  store/                  island.ts: Zustand store + pure transition model
   design/, styles/        design tokens (CSS @theme + small TS mirror)
 src-tauri/                Rust backend
-  src/app.rs              lifecycle: builder, setup, tray, window events
-  src/window/             geometry.rs (pure, tested) + manager.rs (IslandWindow)
+  src/app.rs              lifecycle: builder, setup, tray, window events, shutdown
+  src/window/             geometry.rs (pure, tested) + manager.rs (IslandWindow, frame)
   src/platform/           isolated OS code: windows.rs (Win32), linux.rs (dev host)
   src/commands.rs         IPC surface
-  src/services/           app_info.rs
+  src/signals.rs          Rust → UI channel
+  src/shortcut.rs         global toggle shortcut
+  src/services/           app_info.rs, system_settings.rs
   src/error.rs            serializable error type
   capabilities/           least-privilege permissions
 docs/                     product, architecture, Windows integration, security,
@@ -128,34 +159,67 @@ not configured.
 
 Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 11:
 
+**Window (Phase 0)**
+
 - [ ] The pill appears at the top center of the primary monitor, 8 px below the work area top,
       with no white flash, border, shadow, or visible window rectangle.
 - [ ] Correct size and position at 100 %, 125 %, 150 % and 175 % scaling. Change scaling while
-      the app runs: the pill re-centers.
+      the app runs: the island re-centers.
 - [ ] It stays above normal and maximized windows.
-- [ ] No taskbar button, and absent from Alt+Tab and Task View.
-- [ ] Clicking the pill while typing in another app does **not** move focus or the caret.
-- [ ] Clicks immediately beside the pill reach the window underneath.
-- [ ] The clock is correct and rolls over on the minute, including after sleep/resume.
-- [ ] Hover tooltip shows `Islandy 0.1.0` (IPC `get_app_info` succeeded). Under `tauri dev`,
-      the terminal logs `[islandy] get_app_info -> …`.
+- [ ] No taskbar button, and absent from Alt+Tab and Task View (also after pinning and
+      collapsing, which toggles focusability).
 - [ ] Tray icon → **Quit Islandy** exits; no `islandy.exe` or orphaned `msedgewebview2.exe`
-      remains.
-- [ ] Multi-monitor: the pill sits on the primary monitor, including when the primary is
+      remains. The shortcut is free again afterwards.
+- [ ] Multi-monitor: the island sits on the primary monitor, including when the primary is
       not the leftmost.
+
+**Frame and click-through (Phase 1, highest risk)**
+
+- [ ] The island renders normally (not blank) with the default region strategy. If it is
+      blank or shows artifacts, retry with `ISLANDY_FRAME_STRATEGY=resize` and record which works.
+- [ ] Collapsed: clicks immediately beside and below the pill reach the window underneath.
+- [ ] Expanded: clicks just outside the dashboard reach the window underneath.
+- [ ] Expanding and collapsing: the island stays horizontally centered and top-anchored, with
+      no sideways jump, flicker, or white frame.
+
+**Interaction (Phase 1)**
+
+- [ ] Resting the pointer on the pill expands it after a short delay; brushing past does not.
+- [ ] Moving away collapses it after ~0.4 s; moving back in time keeps it open.
+- [ ] Hovering and clicking media controls while typing in another app does **not** move the
+      caret or focus.
+- [ ] Clicking the pill pins it: it stays open after the pointer leaves; Tab moves focus
+      through controls with a visible focus ring; Escape collapses it and focus returns to the
+      previous app.
+- [ ] Clicking another window while pinned collapses the island.
+- [ ] **Ctrl + Alt + Space** toggles the island from any app. With another app already owning
+      the shortcut, Islandy logs the conflict and does not take it over.
+- [ ] Quick controls open the Wi-Fi, Bluetooth, Sound and Display Settings pages, and the
+      island collapses.
+- [ ] Opening a widget (click its title) shows the detail view; Back and Escape return.
+- [ ] Tray → **Preview peek (demo)** shows a peek that disappears after ~4 s.
+- [ ] With Windows _Animation effects_ turned off, transitions are instant.
+- [ ] The clock and calendar are correct and roll over at the minute and midnight, including
+      after sleep/resume.
 
 ## Known limitations
 
-- **Windows behavior unverified at runtime** (developed on Linux; see note above).
-- **Click-through at rounded corners:** the native window is exactly the pill's bounding box, so
-  the few transparent pixels outside the rounded corners still receive clicks.
-- **Keyboard input:** the window is non-focusable (`WS_EX_NOACTIVATE`), so it cannot receive
-  keyboard input. Phase 1 must make it focusable only in the `focused` state.
+- **Windows behavior unverified at runtime** (developed on Linux; see note above). In
+  particular, window regions with a transparent WebView2 window are untested.
+- **Click-through at rounded corners:** the region is the island's bounding rectangle, so the
+  few transparent pixels outside the rounded corners still receive clicks.
+- **During a collapse animation** (~250 ms) the clickable frame is still the larger size.
+- **Hover-expanded is not keyboard-interactive:** the island only takes focus once pinned
+  (click, widget, shortcut). Escape and click-outside therefore apply to the pinned state;
+  an unpinned dashboard closes when the pointer leaves.
+- **Contextual events while the dashboard is open are dropped**, not queued.
 - **12/24-hour format** follows the WebView language, not a custom Windows regional format.
-- **Display changes:** repositioning happens at startup and on DPI changes; resolution changes,
-  monitor hot-plug, and taskbar moves are not handled yet.
+- **Display changes:** the island re-fits on the next interaction and on DPI changes; a
+  resolution or taskbar change does not move the resting pill immediately.
 - **`WS_EX_TOOLWINDOW` is fragile:** Tauri/tao rewrites extended styles when its own window flags
-  change; the window manager must re-apply it (see `src-tauri/src/platform/windows.rs`).
+  change; `IslandWindow` re-applies it (see `src-tauri/src/platform/windows.rs`).
+- **Configuration** is by environment variable only (no settings UI).
 - **Single instance:** launching twice shows two islands (planned with autostart).
 - **Fullscreen apps:** the island stays on top of them; see `docs/windows-integration.md`.
-- **Linux** is a development host only; transparency there needs a compositor.
+- **Linux** is a development host only; transparency there needs a compositor, and only the
+  input region is applied.
