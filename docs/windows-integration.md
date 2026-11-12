@@ -197,58 +197,29 @@ Two distinct features:
      in Windows Credential Manager. This is network-dependent and account-bound, so it must
      be explicitly opt-in, and it is out of scope for the MVP.
 
-## Claude Code activity
+## Claude Code activity (Phase 4: implemented; verified on Linux with real hooks, unverified on Windows)
 
-Verified against the official hooks reference (https://code.claude.com/docs/en/hooks) on
-2026-11-12:
-
-- Hooks are configured under `"hooks"` in `~/.claude/settings.json` (user),
-  `.claude/settings.json` (project), `.claude/settings.local.json` (local), managed policy,
-  plugin `hooks/hooks.json`, and skill/subagent frontmatter.
-- Handler types: `command` (event JSON on stdin), `http` (event JSON as an HTTP POST body),
-  `mcp_tool`, `prompt`, and `agent` (experimental). Command hooks can be `async: true`
-  (non-blocking).
-- Every event includes `session_id`, `transcript_path`, `cwd`, `permission_mode`, and
-  `hook_event_name`.
-- Relevant events: `SessionStart`, `UserPromptSubmit`, `PreToolUse` / `PostToolUse`
-  (`tool_name`, `tool_input`), `PermissionRequest`, `Notification` (`message`, `title`,
-  `notification_type`), `Stop`, `StopFailure` (`error`), `SubagentStart` / `SubagentStop`,
-  `TaskCreated` / `TaskCompleted`, and `SessionEnd`.
-- Matching hooks run in parallel. Default timeout is 600 s, with shorter defaults on some
-  events. Command hooks run with the user's full permissions. Interactive sessions wait for
-  workspace trust before running settings-file hooks.
-
-**Recommended architecture:**
+Re-checked against the hooks reference and the installed Claude Code 2.1.322 on 2026-11-12.
+Full design: [claude-code-integration.md](claude-code-integration.md).
 
 ```
-Claude Code ──(async command hook)──► islandy-hook.exe ──► named pipe \\.\pipe\islandy-<user-SID>
-                                        (tiny, ships with Islandy)          │ (ACL: current user only)
-                                                                              ▼
-                                                     Islandy: event service → peek / activity state
+Claude Code ──(async, exec-form command hook)──► islandy.exe hook ──► 127.0.0.1:<port> ──► activity engine
+                                                  (reduced event,       (token from receiver.json
+                                                   always exit 0)        in %LOCALAPPDATA%)
 ```
 
-- **Transport: a Windows named pipe, not a localhost HTTP port.** Create it with a security
-  descriptor that grants access only to the current user's SID, and
-  `PIPE_REJECT_REMOTE_CLIENTS`. Other users and remote machines cannot connect, no TCP port is
-  exposed, and there is no DNS-rebinding or browser-origin surface.
-- **Producer: an `async: true` command hook** running a small helper binary that ships with
-  Islandy. It reads the hook JSON from stdin, **drops everything except an allow-listed
-  subset** (`hook_event_name`, `session_id`, a hash or basename of `cwd`, `tool_name`,
-  `notification_type`, timestamps), writes one line to the pipe, and exits 0. If Islandy is
-  not running, it exits 0 immediately. It never blocks or alters Claude Code.
-  Not forwarding `tool_input`, prompts, or transcript paths keeps secrets out of Islandy.
-- **Optional `http` hook alternative:** if a hook must be HTTP, bind to `127.0.0.1` on a
-  random port, write the port and a random 256-bit token to a per-user file under
-  `%LOCALAPPDATA%\Islandy` (user-only ACL), require the token in a header, reject any request
-  that carries an `Origin` header, and cap body size. This has more attack surface than the
-  pipe, so it is not the default.
-- **Validation in Islandy:** strict schema (serde with `deny_unknown_fields` on the reduced
-  message), size limit, rate limit, and a bounded session map that expires idle sessions.
-- **Setup:** Islandy can offer to add the hook to `~/.claude/settings.json`. It must show the
-  diff and ask first, never edit silently, and it must not touch project settings.
-- **UI mapping:** `UserPromptSubmit`/`PreToolUse` → working; `Notification` or
-  `PermissionRequest` → needs attention (peek); `Stop` → done (peek); `StopFailure` → error
-  (peek).
+- **Transport changed from the earlier named-pipe recommendation** to loopback TCP with a
+  per-installation token and a non-HTTP line protocol. It is portable, so the same code ran end
+  to end with real Claude Code in development, and it avoids writing an untested pipe security
+  descriptor blind. Trade-offs and the threat model are in claude-code-integration.md.
+- **Windows-specific points to verify:**
+  - Hooks run under Git Bash or PowerShell. The exec form (`command` + `args`) avoids both
+    shells' quoting.
+  - The GUI-subsystem `islandy.exe` runs as a hook without flashing a console.
+  - No firewall prompt for a loopback listener.
+  - `%LOCALAPPDATA%\com.islandy.desktop` holds `receiver.json` with the profile's user-only ACL.
+- **Setup** edits only `%USERPROFILE%\.claude\settings.json` (or `CLAUDE_CONFIG_DIR`), after an
+  explicit confirmation, with a backup. It never edits project settings.
 
 ## Notifications
 
@@ -270,8 +241,8 @@ Recommended alternative: **first-party contextual sources** that Islandy observe
   `notify` crate) for temporary-file patterns (`.crdownload`, `.part`, `.partial`) appearing
   and being renamed to the final name. This is a heuristic: browsers expose no progress API,
   so show "downloading…" / "downloaded", not a percentage, unless the size is known.
-- A future local event API over the same named pipe for user scripts (for example, "build
-  finished"), with the same reduced, validated schema.
+- Developer events from scripts: `islandy notify …` (Phase 4) over the same authenticated
+  local receiver, with a reduced, validated schema.
 
 All sources feed one event service that de-duplicates and rate-limits them, then dispatches
 `CONTEXT_EVENT` into the island state model. That model already prevents automatic events

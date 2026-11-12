@@ -250,3 +250,15 @@ describe("island store timers", () => {
     unsubscribe();
   });
 });
+
+describe("per-peek dwell (Phase 4)", () => {
+  it("uses the peek's own dwell time, else the default", () => {
+    const s = transition(initialIslandState, {
+      type: "CONTEXT_EVENT",
+      peek: { ...peek, dwellMs: 8000 },
+    });
+    expect(desiredTimers(s, delays).peek?.ms).toBe(8000);
+    const d = transition(initialIslandState, { type: "CONTEXT_EVENT", peek });
+    expect(desiredTimers(d, delays).peek?.ms).toBe(4000);
+  });
+});

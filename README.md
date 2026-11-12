@@ -9,14 +9,14 @@ idle cost, fully local.
 
 ## Status
 
-**Phase 3: Native system dashboard and quick controls.** What exists today:
+**Phase 4: Smart activity engine and Claude Code integration.** What exists today:
 
 - A black pill at the top center of the primary monitor (time, ambient glyph, media
   indicator) that expands with a spring animation into an ~820 × 248 dashboard on hover
   (150 ms intent delay), click, or **Ctrl + Alt + Space**.
 - Dashboard: toolbar (time, date, quick controls, pin, collapse) and three widgets:
   **media** (real Windows media sessions), **calendar** (real, locale-aware, with month
-  navigation), and **activity** (demo data). Each widget has a detail view.
+  navigation), and **activity** (real activity, Phase 4). Each widget has a detail view.
 - **Media (Phase 2):** any app that publishes a Windows media session (browsers, Spotify,
   Media Player, …) is detected automatically through GSMTC. Title, artist, album and artwork;
   play/pause, previous/next and seeking where the app supports them; a session switcher when
@@ -40,8 +40,24 @@ idle cost, fully local.
     changes.
   - See [docs/system.md](docs/system.md).
 
-**Demo data.** The activity widget shows local sample data, labelled _Demo_; it is not
-connected to Claude Code yet (Phase 4).
+- **Activity (Phase 4):**
+  - **Claude Code (opt-in):** Islandy adds observational hooks to your user settings, after a
+    confirmation step, keeping a backup and every other hook. Each session is tracked
+    separately: working, needs attention, waiting for input, finished responding, error, ended.
+    It shows no progress estimates, offers no remote approval, and never stores prompts,
+    commands, file contents or paths.
+  - **Pill and peeks:** a wider pill shows "Islandy · Working", "3 sessions · 1 needs you" or
+    "Islandy · Building". Attention keeps an amber indicator until it is answered or dismissed.
+    Peeks are prioritized (P0–P3), deduplicated, queued, and never interrupt the open dashboard.
+  - **Developer events:** `islandy notify build failed`, `islandy notify tests passed`, …
+    through the same authenticated local receiver.
+  - **Activity center:** recent events with source filters, dismiss and clear history. History
+    is kept locally for 7 days (at most 300 events).
+  - **Quiet mode:** no automatic peeks, with indicators and history kept. Each source can be
+    switched off.
+  - See [docs/activity-engine.md](docs/activity-engine.md),
+    [docs/claude-code-integration.md](docs/claude-code-integration.md) and
+    [docs/privacy.md](docs/privacy.md).
 
 Not built yet: Islandy's own settings, autostart, single instance, fullscreen handling,
 switching the default audio output (no documented Windows API). See [docs/roadmap.md](docs/roadmap.md).
@@ -52,8 +68,11 @@ switching the default audio output (no documented Windows API). See [docs/roadma
 > Windows-native runtime behavior (WebView2 transparency and window regions, focus handling,
 > Alt+Tab, the global shortcut, Settings pages, DPI on real monitors, **all GSMTC media
 > behavior with real players**, and **all Phase 3 system integration: Core Audio, battery,
-> network, radios, brightness**) has **not** been verified on a Windows machine. See the
-> checklist below.
+> network, radios, brightness**, and **all Phase 4 Windows paths: hook execution under Git
+> Bash/PowerShell, the loopback receiver and firewall, `%LOCALAPPDATA%` files**) has **not**
+> been verified on a Windows machine. The Phase 4 pipeline _was_ verified end to end on Linux
+> with the real Claude Code 2.1.322 (see docs/claude-code-integration.md → Verification). See
+> the checklist below.
 
 ## Tech stack
 
@@ -136,9 +155,10 @@ The release binary is at `src-tauri/target/release/islandy.exe`, the installer u
 src/                      React frontend
   components/island/      IslandRoot (animated surface), Collapsed/Peek/ExpandedIsland,
                           IslandToolbar, QuickControls, ActivityBars, NowProvider
-  components/widgets/     Media (+ SessionSwitcher, Artwork), Calendar (+ MonthGrid),
-                          Activity (+ ActivityCard), details
-  components/system/       Audio, System, Network, Bluetooth and Display panels
+  components/widgets/     Media (+ SessionSwitcher, Artwork), Calendar (+ MonthGrid), details
+  components/system/      Audio, System, Network, Bluetooth and Display panels
+  components/activity/    ActivityWidget, ActivityCenter, ClaudePanel (session switcher),
+                          IntegrationsPanel, ActivityRow, ClaudeGlyph
   components/ui/          IconButton, Tooltip, WidgetSurface, StatusIndicator, LevelSlider,
                           Switch, MeterBar
   features/island/        island-store (state machine + timers), window-coordinator,
@@ -147,7 +167,8 @@ src/                      React frontend
   features/media/         media store (native snapshots, commands, artwork) + pure model
   features/system/        system store (per-domain updates, slider coalescing, alerts) +
                           pure model
-  features/activity/      demo activity data (Phase 4 replaces it)
+  features/activity/      activity store (snapshots, peeks, integration), pure model,
+                          presentation coordinator (peek priority/queue), tray demo peek
   hooks/                  useClock (minute-aligned), useNow, usePrefersReducedMotion
   services/               native.ts: the only module that calls Rust; types.ts: IPC types
   design/, styles/        design tokens (CSS @theme + small TS mirror)
@@ -156,15 +177,19 @@ src-tauri/                Rust backend
   src/window/             geometry.rs (pure, tested) + manager.rs (IslandWindow, frame)
   src/platform/           isolated OS code: windows.rs (Win32), linux.rs (dev host)
   src/commands.rs         IPC surface
+  src/cli.rs              `islandy hook` (Claude Code bridge), `notify`, `status`
   src/signals.rs          Rust → UI channel
   src/shortcut.rs         global toggle shortcut
   src/services/           app_info.rs, winrt.rs (shared WinRT helpers), media/ (GSMTC
                           worker, see docs/media.md), system/ (audio, power, network,
-                          radios, metrics, brightness, settings; see docs/system.md)
+                          radios, metrics, brightness, settings; see docs/system.md),
+                          activity/ (engine, receiver, protocol, store, claude_settings;
+                          see docs/activity-engine.md), paths.rs (per-user data dir)
   src/error.rs            serializable error type
   capabilities/           least-privilege permissions
-docs/                     product, architecture, media, system, Windows integration,
-                          security, performance, roadmap
+docs/                     product, architecture, media, system, activity engine, Claude Code
+                          integration, privacy, Windows integration, security, performance,
+                          roadmap
 ```
 
 ## Identifiers to finalize before release
@@ -269,6 +294,23 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
 - [ ] Quitting with the System or Display panel open exits promptly.
 - [ ] Idle CPU with music playing and the island collapsed stays near the idle budget
       (see `docs/performance.md`).
+      **Activity (Phase 4)**. Note the Claude Code version and the shell hooks run under (Git
+      Bash or PowerShell).
+
+- [ ] Integrations → Claude Code → Enable → Add hooks: `~/.claude/settings.json` gains
+      Islandy's 12 handlers, other hooks are untouched, a `settings.islandy-backup-*.json`
+      appears. Remove hooks restores the previous content.
+- [ ] A new interactive Claude Code session: the pill shows "<project> · Working" during a
+      turn and a "Claude finished responding" peek at the end. No console window flashes.
+- [ ] A permission prompt in Claude Code: an amber "Needs attention · Permission requested"
+      peek, then the amber pill indicator until the prompt is answered.
+- [ ] Two sessions in the same folder: both listed separately in the Claude Code view.
+- [ ] Quit Islandy while Claude Code runs: Claude Code is unaffected (no errors, no delay);
+      restart Islandy: sessions reappear on their next event, nothing stale is shown.
+- [ ] No Windows Firewall prompt when Islandy starts (the receiver binds 127.0.0.1 only).
+- [ ] PowerShell: `& "$env:LOCALAPPDATA\Islandy\islandy.exe" notify build failed | Out-Null`
+      peeks "Build failed"; `status | Write-Output` prints "running".
+- [ ] Quiet mode (moon): no peeks; the pill shows the moon; attention still turns the pill amber.
 - [ ] With Windows _Animation effects_ turned off, transitions are instant.
 - [ ] The clock and calendar are correct and roll over at the minute and midnight, including
       after sleep/resume.
@@ -283,7 +325,15 @@ Run `pnpm tauri dev` (and later the installed release build) on Windows 10 and 1
 - **Hover-expanded is not keyboard-interactive:** the island only takes focus once pinned
   (click, widget, shortcut). Escape and click-outside therefore apply to the pinned state;
   an unpinned dashboard closes when the pointer leaves.
-- **Contextual events while the dashboard is open are dropped**, not queued.
+- **Contextual events while the dashboard is open are not shown as peeks.** They are recorded
+  in the activity center, and Claude Code attention keeps its pill indicator.
+- **Claude Code:** status is what the hooks report. Missed events show "Status unknown", never
+  "done". In non-interactive `claude -p` runs, the final async `Stop` hook can be cut off when
+  the process exits. Opening the right terminal isn't possible, because no verified target is
+  available. See [docs/claude-code-integration.md](docs/claude-code-integration.md).
+- **Local receiver:** loopback TCP with a token, instead of the named pipe that earlier docs
+  proposed (trade-offs in docs/claude-code-integration.md). A second Islandy instance takes
+  over the receiver.
 - **Media** shows only what each app publishes through Windows media sessions; see
   [docs/media.md](docs/media.md) for media-specific limitations.
 - **System:**

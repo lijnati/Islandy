@@ -109,3 +109,28 @@ What Phase 3 does to stay light:
    no long tasks, no layout thrashing during expand and collapse.
 7. Record results in this file with the machine specs, Windows build, display scaling, and the
    WebView2 version (from `get_app_info`).
+
+## Phase 4 measurements (Linux dev host, debug build; not Windows)
+
+| Measurement                                              | Result                                          |
+| -------------------------------------------------------- | ----------------------------------------------- |
+| `islandy hook` per call, Islandy running, small payload  | 31–36 ms (process start to exit)                |
+| `islandy hook`, 3 MB `tool_response` payload             | 41–54 ms (the payload is skipped, never stored) |
+| `islandy hook`, Islandy closed / stale port              | 26–58 ms, exit 0, no output                     |
+| App main process idle CPU, 30 s, activity engine running | 7 ticks = 0.07 s CPU (≈ 0.2 %)                  |
+| App main process RSS (debug, WebKitGTK)                  | ≈ 165 MB, unchanged from Phase 3 (≈ 160 MB)     |
+| Snapshot coalescing: 40 tool events                      | ≤ 4 UI updates (test)                           |
+| Windows release exe / NSIS installer (MinGW cross-build) | 4.2 MB / 1.70 MiB (Phase 3: 3.9 MB / 1.61 MiB)  |
+
+How Phase 4 stays light:
+
+- No polling. The receiver blocks in `accept()`, and the worker sleeps until the next message
+  or the next engine deadline.
+- Tool events don't publish unless something visible changed (status, tool category, …);
+  publishes are coalesced (120 ms). History writes are debounced (1.5 s).
+- History and the dedupe table are bounded (300 events, 256 keys). The coordinator queue holds
+  at most 4.
+- Animation: the Claude glyph turns (CSS `transform`) only while a session is working. The
+  elapsed timer ticks per second only while the Claude Code view shows a working session.
+
+Windows measurements (WebView2, release build) are still to do, following the procedure below.

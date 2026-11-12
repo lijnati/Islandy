@@ -456,7 +456,8 @@ mod tests {
     #[test]
     fn snapshot_keys_are_camel_case() {
         let json = serde_json::to_value(SystemSnapshot::initial()).unwrap();
-        let keys: Vec<_> = json.as_object().unwrap().keys().cloned().collect();
+        let mut keys: Vec<_> = json.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
         assert_eq!(
             keys,
             ["audio", "display", "metrics", "network", "power", "radios", "revision"]

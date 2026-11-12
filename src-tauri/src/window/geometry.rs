@@ -42,6 +42,9 @@ pub mod size {
 
     /// Resting pill. Keep in sync with the initial size in `tauri.conf.json`.
     pub const COLLAPSED: LogicalSize = LogicalSize::new(220.0, 44.0);
+    /// The resting pill while ambient activity is shown (e.g. a Claude Code
+    /// session working or waiting): wide enough for "project · status".
+    pub const AMBIENT: LogicalSize = LogicalSize::new(300.0, 44.0);
     /// Temporary contextual pill (a wider, slightly taller capsule).
     pub const PEEK: LogicalSize = LogicalSize::new(360.0, 48.0);
     /// Expanded dashboard (also used by widget detail views).
@@ -59,6 +62,7 @@ pub const EDGE_MARGIN: f64 = 12.0;
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Layouts {
     pub collapsed: LogicalSize,
+    pub ambient: LogicalSize,
     pub peek: LogicalSize,
     pub expanded: LogicalSize,
 }
@@ -66,7 +70,10 @@ pub struct Layouts {
 impl Layouts {
     /// The smallest size containing every layout: the native canvas size.
     pub fn canvas(&self) -> LogicalSize {
-        self.collapsed.union(self.peek).union(self.expanded)
+        self.collapsed
+            .union(self.ambient)
+            .union(self.peek)
+            .union(self.expanded)
     }
 }
 
@@ -110,6 +117,7 @@ pub fn fit_layouts(area: LogicalSize, top_margin: f64) -> Layouts {
     let fit = |s: LogicalSize| LogicalSize::new(s.width.min(max_width), s.height.min(max_height));
     Layouts {
         collapsed: fit(size::COLLAPSED),
+        ambient: fit(size::AMBIENT),
         peek: fit(size::PEEK),
         expanded: fit(size::EXPANDED),
     }
@@ -273,6 +281,7 @@ mod tests {
         assert_eq!(l.expanded.width, (1024.0f64 / 1.5 - 24.0).floor());
         assert_eq!(l.expanded.height, size::EXPANDED.height);
         assert_eq!(l.collapsed, size::COLLAPSED, "small layouts are untouched");
+        assert_eq!(l.ambient, size::AMBIENT);
         // And it stays on screen once converted back to physical pixels.
         let r = top_center(area(0, 0, 1024, 728), 1.5, l.expanded, TOP_MARGIN);
         assert!(r.x >= 12 && r.x + r.width as i32 <= 1024 - 12);

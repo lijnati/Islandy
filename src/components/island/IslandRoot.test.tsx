@@ -49,7 +49,8 @@ describe("IslandRoot (browser mode, no native shell)", () => {
     expect(
       screen.getByRole("button", { name: "Unpin dashboard" }).getAttribute("aria-pressed"),
     ).toBe("true");
-    expect(screen.getAllByText("Demo")).toHaveLength(1); // activity only; media is real
+    expect(screen.queryAllByText("Demo")).toHaveLength(0); // no widget shows demo data anymore
+    expect(screen.getByText("No recent activity")).toBeDefined();
 
     fireEvent.keyDown(window, { key: "Escape" });
     await settle();

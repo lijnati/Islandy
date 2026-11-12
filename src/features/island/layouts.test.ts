@@ -20,4 +20,13 @@ describe("layouts", () => {
     expect(layoutFor("expanded", designLayouts)).toBe(designLayouts.expanded);
     expect(layoutFor("focused", designLayouts)).toBe(designLayouts.expanded);
   });
+
+  it("widens only the collapsed pill for ambient activity", () => {
+    expect(layoutFor("collapsed", designLayouts, true)).toBe(designLayouts.ambient);
+    expect(layoutFor("peek", designLayouts, true)).toBe(designLayouts.peek);
+    expect(layoutFor("expanded", designLayouts, true)).toBe(designLayouts.expanded);
+    // The ambient pill fits inside the canvas every other layout defines.
+    expect(designLayouts.ambient.width).toBeLessThan(designLayouts.peek.width);
+    expect(designLayouts.ambient.height).toBe(designLayouts.collapsed.height);
+  });
 });

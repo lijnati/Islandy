@@ -3,7 +3,8 @@
 //! wrapper in `src/services/native.ts`.
 //!
 //! Arguments are typed and validated: sizes are checked numbers, settings
-//! pages are an enum. No command accepts paths, URLs or command lines.
+//! pages are an enum. No command accepts paths, URLs or command lines (the
+//! Claude Code integration derives every path itself).
 
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, Manager, Runtime, State};
@@ -11,6 +12,11 @@ use tauri::{ipc::Channel, AppHandle, Manager, Runtime, State};
 use crate::{
     error::{IslandyError, Result},
     services::{
+        activity::{
+            claude_settings::{self, ClaudeIntegration, IntegrationError},
+            model::{ActivitySnapshot, ActivitySource, ActivityUpdate},
+            now_ms, ActivityCommand, ActivityService,
+        },
         app_info::{self, AppInfo},
         media::{
             models::{MediaAction, MediaSnapshot, SessionId},
@@ -245,4 +251,98 @@ pub async fn set_display_brightness(
             id, brightness,
         )))
         .await?)
+}
+
+/* -------------------------------------------------------------------------- */
+/* Activity (Phase 4). Commands only change Islandy's own state; the result   */
+/* arrives on the channel. Claude Code integration edits only the user-level  */
+/* settings file, and only when the user presses Enable / Remove.             */
+/* -------------------------------------------------------------------------- */
+
+fn activity_id(value: &str) -> Result<String> {
+    let valid = value.len() <= 24
+        && value.len() > 1
+        && value.starts_with('a')
+        && value[1..].bytes().all(|b| b.is_ascii_hexdigit());
+    if valid {
+        Ok(value.to_owned())
+    } else {
+        Err(IslandyError::InvalidArgument("invalid activity id"))
+    }
+}
+
+/// Registers the activity channel and returns the latest snapshot atomically.
+#[tauri::command]
+pub fn connect_activity(
+    activity: State<'_, ActivityService>,
+    channel: Channel<ActivityUpdate>,
+) -> ActivitySnapshot {
+    activity.connect(move |update| {
+        if let Err(e) = channel.send(update) {
+            eprintln!("[islandy] failed to deliver activity update: {e}");
+        }
+    })
+}
+
+#[tauri::command]
+pub fn get_activity_snapshot(activity: State<'_, ActivityService>) -> ActivitySnapshot {
+    activity.snapshot()
+}
+
+/// Dismisses an active event, or removes a finished one from history.
+#[tauri::command]
+pub fn dismiss_activity(activity: State<'_, ActivityService>, id: String) -> Result<()> {
+    activity.command(ActivityCommand::Dismiss(activity_id(&id)?));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn clear_activity_history(activity: State<'_, ActivityService>) {
+    activity.command(ActivityCommand::ClearHistory);
+}
+
+/// Islandy's own quiet mode (suppresses peeks). Not Windows Do Not Disturb.
+#[tauri::command]
+pub fn set_quiet_mode(activity: State<'_, ActivityService>, quiet: bool) {
+    activity.command(ActivityCommand::SetQuiet(quiet));
+}
+
+#[tauri::command]
+pub fn set_activity_source(
+    activity: State<'_, ActivityService>,
+    source: ActivitySource,
+    enabled: bool,
+) {
+    activity.command(ActivityCommand::SetSource(source, enabled));
+}
+
+fn own_hook_command() -> Result<String> {
+    let exe = std::env::current_exe().map_err(|_| IntegrationError::NoExecutable)?;
+    Ok(claude_settings::hook_command(&exe))
+}
+
+/// Reads the user-level Claude Code settings (never modifies them).
+#[tauri::command]
+pub async fn get_claude_integration() -> Result<ClaudeIntegration> {
+    let command = own_hook_command()?;
+    Ok(claude_settings::status(
+        claude_settings::Location::user().as_ref(),
+        &command,
+    ))
+}
+
+/// Adds Islandy's hooks to `~/.claude/settings.json` (explicit user action).
+#[tauri::command]
+pub async fn install_claude_integration() -> Result<ClaudeIntegration> {
+    let command = own_hook_command()?;
+    let location = claude_settings::Location::user().ok_or(IntegrationError::NotDetected)?;
+    Ok(claude_settings::install(&location, &command, now_ms())?)
+}
+
+/// Removes Islandy's hooks (and nothing else) from the user-level settings.
+#[tauri::command]
+pub async fn remove_claude_integration() -> Result<ClaudeIntegration> {
+    let command = own_hook_command()?;
+    let location = claude_settings::Location::user().ok_or(IntegrationError::NotDetected)?;
+    Ok(claude_settings::remove(&location, &command, now_ms())?)
 }

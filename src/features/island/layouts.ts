@@ -20,15 +20,17 @@ export function fitToViewport(
   });
   return {
     collapsed: fit(layouts.collapsed),
+    ambient: fit(layouts.ambient),
     peek: fit(layouts.peek),
     expanded: fit(layouts.expanded),
   };
 }
 
-export function layoutFor(mode: IslandMode, layouts: IslandLayouts): Size {
+/** `ambient`: the collapsed pill shows activity (wider pill). */
+export function layoutFor(mode: IslandMode, layouts: IslandLayouts, ambient = false): Size {
   switch (mode) {
     case "collapsed":
-      return layouts.collapsed;
+      return ambient ? layouts.ambient : layouts.collapsed;
     case "peek":
       return layouts.peek;
     case "expanded":

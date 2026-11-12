@@ -46,6 +46,8 @@ export interface Size {
 /** Layout sizes fitted to the island's monitor. Mirrors `geometry::Layouts`. */
 export interface IslandLayouts {
   collapsed: Size;
+  /** The resting pill while ambient activity is shown. */
+  ambient: Size;
   peek: Size;
   expanded: Size;
 }
@@ -274,3 +276,131 @@ export type SystemUpdate =
 
 /** What the UI shows; drives optional sampling. Mirrors `models::SystemFocus`. */
 export type SystemFocus = "none" | "overview" | "display";
+
+/* ------------------------------------------------------------------------ */
+/* Activity (mirrors `src-tauri/src/services/activity/model.rs`)              */
+/* ------------------------------------------------------------------------ */
+
+export type ActivitySource = "claudeCode" | "developer" | "system";
+export type ActivitySeverity = "info" | "success" | "warning" | "error" | "attention";
+export type ActivityLifecycle = "active" | "resolved" | "dismissed" | "expired";
+/** 0 needs attention · 1 important outcome · 2 informational · 3 ambient. */
+export type ActivityPriority = 0 | 1 | 2 | 3;
+
+export type ActivityKind =
+  | "claudeSessionStarted"
+  | "claudeAttention"
+  | "claudeWaitingForInput"
+  | "claudeTurnFinished"
+  | "claudeError"
+  | "claudeSessionEnded"
+  | "buildStarted"
+  | "buildSucceeded"
+  | "buildFailed"
+  | "testsStarted"
+  | "testsPassed"
+  | "testsFailed"
+  | "serverStarted"
+  | "serverStopped"
+  | "message"
+  | "batteryLow"
+  | "batteryCritical"
+  | "powerConnected"
+  | "powerDisconnected"
+  | "networkLost"
+  | "networkRestored"
+  | "audioOutputChanged";
+
+export interface ActivityEvent {
+  /** Stable, unique, increasing (`a<hex>`). */
+  id: string;
+  source: ActivitySource;
+  kind: ActivityKind;
+  /** Opaque Claude session key (`c<16 hex>`). */
+  session: string | null;
+  /** A folder name, never a path. */
+  project: string | null;
+  title: string;
+  description: string | null;
+  severity: ActivitySeverity;
+  priority: ActivityPriority;
+  lifecycle: ActivityLifecycle;
+  /** Epoch ms, assigned by Islandy. */
+  timestamp: number;
+  expiresAt: number | null;
+  dedupeKey: string | null;
+}
+
+export type SessionStatus =
+  "ready" | "working" | "attention" | "waiting" | "idle" | "error" | "ended";
+
+export type ToolCategory =
+  | "reading"
+  | "editing"
+  | "searching"
+  | "running"
+  | "web"
+  | "delegating"
+  | "planning"
+  | "mcp"
+  | "other";
+
+export interface ClaudeSession {
+  id: string;
+  project: string | null;
+  status: SessionStatus;
+  /** `null`: the session was already running when Islandy first saw it. */
+  startedAt: number | null;
+  turnStartedAt: number | null;
+  lastSeenAt: number;
+  lastTool: ToolCategory | null;
+  subagents: number;
+  attentionEvent: string | null;
+  attentionDismissed: boolean;
+  endedAt: number | null;
+  /** Working, but no event for a long time: status unknown. */
+  stale: boolean;
+}
+
+export interface SourceToggles {
+  claudeCode: boolean;
+  developer: boolean;
+  system: boolean;
+}
+
+export interface ActivitySettings {
+  quiet: boolean;
+  sources: SourceToggles;
+}
+
+export type ReceiverStatus = "starting" | "listening" | "unavailable";
+
+export interface ActivitySnapshot {
+  revision: number;
+  sessions: ClaudeSession[];
+  /** Newest first, bounded. */
+  events: ActivityEvent[];
+  settings: ActivitySettings;
+  receiver: ReceiverStatus;
+  historyError: boolean;
+}
+
+export interface PeekRequest {
+  event: ActivityEvent;
+  dwellMs: number;
+}
+
+export type ActivityUpdate =
+  { type: "snapshot"; snapshot: ActivitySnapshot } | { type: "peek"; peek: PeekRequest };
+
+/** Mirrors `claude_settings::IntegrationState`. */
+export type IntegrationState =
+  "notDetected" | "notInstalled" | "installed" | "needsUpdate" | "unreadable";
+
+export interface ClaudeIntegration {
+  state: IntegrationState;
+  settingsPath: string | null;
+  events: string[];
+  /** The exact JSON Islandy adds. */
+  snippet: string;
+}

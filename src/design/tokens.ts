@@ -66,6 +66,7 @@ export const radius = {
  */
 export const designLayouts: IslandLayouts = {
   collapsed: { width: 220, height: 44 },
+  ambient: { width: 300, height: 44 },
   peek: { width: 360, height: 48 },
   expanded: { width: 820, height: 248 },
 };

@@ -11,7 +11,7 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::{
     commands,
-    services::{media::MediaService, system::SystemService},
+    services::{activity::ActivityService, media::MediaService, system::SystemService},
     shortcut,
     signals::{self, IslandSignal, SignalHub},
     window::{IslandWindow, WindowState},
@@ -46,13 +46,28 @@ pub fn run() {
             commands::set_audio_muted,
             commands::set_radio_state,
             commands::set_display_brightness,
+            commands::connect_activity,
+            commands::get_activity_snapshot,
+            commands::dismiss_activity,
+            commands::clear_activity_history,
+            commands::set_quiet_mode,
+            commands::set_activity_source,
+            commands::get_claude_integration,
+            commands::install_claude_integration,
+            commands::remove_claude_integration,
         ])
         .setup(|app| {
             setup_tray(app)?;
             // Media runs on its own worker thread; starting it never blocks.
             app.manage(MediaService::start()?);
             // Audio, power, network and display run on their own workers.
-            app.manage(SystemService::start()?);
+            let system = SystemService::start()?;
+            // Activity: the local receiver, Claude Code sessions and history.
+            // System alerts flow into it, so it decides on their peeks too.
+            let activity = ActivityService::start()?;
+            system.observe_alerts(activity.alert_observer());
+            app.manage(system);
+            app.manage(activity);
             let status = shortcut::register(app.handle());
             app.manage(status);
             let island = IslandWindow::get(app.handle())?;
@@ -110,6 +125,10 @@ pub fn run() {
             // Unregister Core Audio / WinRT callbacks (bounded waits).
             if let Some(system) = app.try_state::<SystemService>() {
                 system.shutdown();
+            }
+            // Stop the receiver (removing its connection file) and flush history.
+            if let Some(activity) = app.try_state::<ActivityService>() {
+                activity.shutdown();
             }
         }
     });

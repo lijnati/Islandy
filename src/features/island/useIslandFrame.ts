@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { isNativeAvailable, setIslandFrame } from "../../services/native";
 import type { Size } from "../../services/types";
+import { useAmbient } from "../activity/use-ambient";
 import { useIsland, type IslandMode } from "./island-store";
 import { layoutFor, layoutStore, useLayouts } from "./layouts";
 import { WindowCoordinator } from "./window-coordinator";
@@ -38,7 +39,8 @@ export interface RenderedFrame {
 export function useIslandFrame(): RenderedFrame & { onAnimationComplete: () => void } {
   const mode = useIsland((s) => s.mode);
   const layouts = useLayouts();
-  const target = layoutFor(mode, layouts);
+  const ambient = useAmbient() !== null;
+  const target = layoutFor(mode, layouts, ambient);
   const { width, height } = target;
 
   const [rendered, setRendered] = useState<RenderedFrame>({ mode, from: mode, size: target });

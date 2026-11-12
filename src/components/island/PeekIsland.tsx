@@ -1,45 +1,25 @@
-import {
-  Battery,
-  BatteryLow,
-  Check,
-  Network,
-  Plug,
-  Sparkle,
-  Speaker,
-  Wifi,
-  WifiOff,
-  type LucideIcon,
-} from "lucide-react";
+import { Check, Sparkle } from "lucide-react";
 
-import {
-  dispatchIsland,
-  type PeekContent,
-  type PeekIcon,
-} from "../../features/island/island-store";
+import { dispatchIsland, type PeekContent } from "../../features/island/island-store";
+import { ACTIVITY_ICONS } from "../activity/icons";
 import { MediaArtwork } from "../widgets/Artwork";
 import { ActivityBars } from "./ActivityBars";
 import { focusRing } from "../ui/IconButton";
 import { StatusIndicator } from "../ui/StatusIndicator";
 import { cx } from "../ui/cx";
 
-const PEEK_ICONS: Record<PeekIcon, LucideIcon> = {
-  battery: Battery,
-  batteryLow: BatteryLow,
-  plug: Plug,
-  wifi: Wifi,
-  network: Network,
-  offline: WifiOff,
-  speaker: Speaker,
-};
-
 function PeekGlyph({ peek }: { peek: PeekContent }) {
-  const Icon = peek.icon ? PEEK_ICONS[peek.icon] : peek.tone === "success" ? Check : Sparkle;
+  const Icon = peek.icon ? ACTIVITY_ICONS[peek.icon] : peek.tone === "success" ? Check : Sparkle;
   return (
     <span
       aria-hidden="true"
       className={cx(
         "flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-elevated",
-        peek.tone === "attention" ? "text-status-attention" : "text-fg",
+        peek.tone === "attention"
+          ? "text-status-attention"
+          : peek.tone === "waiting"
+            ? "text-status-waiting"
+            : "text-fg",
       )}
     >
       <Icon size={15} strokeWidth={2} />

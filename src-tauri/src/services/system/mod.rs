@@ -47,7 +47,7 @@ use self::{
     audio::{AudioMessage, AudioRequest},
     display::{DisplayMessage, DisplayRequest},
     events::SystemHub,
-    models::{SystemFocus, SystemSnapshot, SystemUpdate},
+    models::{SystemAlert, SystemFocus, SystemSnapshot, SystemUpdate},
     monitor::{MonitorMessage, MonitorRequest},
 };
 
@@ -258,6 +258,11 @@ impl SystemService {
     /// Registers the UI sink and returns the current snapshot atomically.
     pub fn connect(&self, sink: impl Fn(SystemUpdate) + Send + 'static) -> SystemSnapshot {
         self.hub.connect(sink)
+    }
+
+    /// Forwards alerts to the activity engine (history and peeks).
+    pub fn observe_alerts(&self, observer: impl Fn(&SystemAlert) + Send + 'static) {
+        self.hub.observe_alerts(observer);
     }
 
     pub fn snapshot(&self) -> SystemSnapshot {
