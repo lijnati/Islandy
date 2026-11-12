@@ -1,0 +1,76 @@
+name: Release
+
+# Builds the Windows NSIS installer with MSVC and publishes it to a GitHub Release.
+# Triggered by pushing a `v*` tag (e.g. v0.1.0-rc.1), or manually for an existing tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and release (e.g. v0.1.0-rc.1)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tests
+        run: |
+          pnpm test
+          pnpm test:rust
+
+      - name: Release notes
+        id: notes
+        shell: bash
+        run: |
+          notes="docs/releases/${TAG}.md"
+          if [ -f "$notes" ]; then cp "$notes" release-notes.md; else echo "Islandy ${TAG}" > release-notes.md; fi
+          if [[ "$TAG" == *-* ]]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
+          {
+            echo "body<<__NOTES__"
+            cat release-notes.md
+            echo
+            echo "__NOTES__"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ env.TAG }}
+          releaseName: Islandy ${{ env.TAG }}
+          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseDraft: false
+          prerelease: ${{ steps.notes.outputs.prerelease }}
+          args: --target x86_64-pc-windows-msvc

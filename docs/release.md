@@ -17,6 +17,13 @@ pnpm check                 # typecheck, lint, format, tests, clippy, cargo test
 pnpm tauri build           # src-tauri/target/release/islandy.exe + bundle/nsis/*.exe
 ```
 
+### CI release (GitHub Actions)
+
+`.github/workflows/release.yml` builds the NSIS installer with MSVC on `windows-latest` and
+publishes it to a GitHub Release. Push a `v<version>` tag to run it (or run it manually for an
+existing tag). Notes come from `docs/releases/<tag>.md`; tags containing `-` (e.g. `-rc.1`) are
+marked as pre-releases.
+
 Cross-builds from Linux use the MinGW toolchain
 (`pnpm tauri build --target x86_64-pc-windows-gnu`, needs `mingw-w64` and `nsis`). They are fine
 for testing the installer; prefer an MSVC build for distribution.
