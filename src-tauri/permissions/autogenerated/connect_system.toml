@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-connect-system"
+description = "Enables the connect_system command without any pre-configured scope."
+commands.allow = ["connect_system"]
+
+[[permission]]
+identifier = "deny-connect-system"
+description = "Denies the connect_system command without any pre-configured scope."
+commands.deny = ["connect_system"]

@@ -1,78 +1,105 @@
-import { Bluetooth, Monitor, Settings, Volume2, Wifi, type LucideIcon } from "lucide-react";
+import { Gauge, Settings, Sun, type LucideIcon } from "lucide-react";
 
-import { dispatchIsland } from "../../features/island/island-store";
+import { dispatchIsland, useIsland, type WidgetId } from "../../features/island/island-store";
 import { useCanOpenSystemSettings } from "../../features/island/native-status";
-import { openSystemSettings } from "../../services/native";
-import type { SettingsPage } from "../../services/types";
+import { networkSummary } from "../../features/system/system-model";
+import { useSystem } from "../../features/system/system-store";
 import { IconButton } from "../ui/IconButton";
+import { bluetoothIcon, networkIcon, volumeIcon } from "../system/icons";
+import { openSettings } from "../../features/system/open-settings";
+
+type Panel = Extract<WidgetId, "network" | "bluetooth" | "audio" | "display" | "system">;
 
 interface Control {
-  page: SettingsPage | null;
+  panel: Panel;
   label: string;
   icon: LucideIcon;
+  /** Short live status for the tooltip. */
+  status: string | null;
 }
 
-const CONTROLS: readonly Control[] = [
-  { page: "wifi", label: "Wi-Fi", icon: Wifi },
-  { page: "bluetooth", label: "Bluetooth", icon: Bluetooth },
-  { page: "sound", label: "Sound", icon: Volume2 },
-  { page: "display", label: "Display", icon: Monitor },
-  { page: null, label: "Islandy settings", icon: Settings },
-];
+function useControls(): Control[] {
+  const network = useSystem((s) => s.snapshot?.network);
+  const bluetooth = useSystem((s) => s.snapshot?.radios.bluetooth);
+  const radiosReady = useSystem((s) => s.snapshot?.radios.status === "ready");
+  const output = useSystem((s) => s.snapshot?.audio.output);
+  return [
+    {
+      panel: "network",
+      label: "Network",
+      icon: networkIcon(network),
+      status: network?.status === "ready" ? networkSummary(network).title : null,
+    },
+    {
+      panel: "bluetooth",
+      label: "Bluetooth",
+      icon: bluetoothIcon(bluetooth),
+      status: radiosReady
+        ? bluetooth
+          ? bluetooth.state === "on"
+            ? "On"
+            : "Off"
+          : "No adapter"
+        : null,
+    },
+    {
+      panel: "audio",
+      label: "Sound",
+      icon: volumeIcon(output),
+      status: output ? (output.muted ? "Muted" : `${output.volume}%`) : null,
+    },
+    { panel: "display", label: "Display", icon: Sun, status: null },
+    { panel: "system", label: "System", icon: Gauge, status: null },
+  ];
+}
 
 /**
- * Honest quick controls (Phase 1): each opens the matching Windows Settings
- * page — none pretends to toggle anything. Islandy's own settings are marked
- * as coming soon. Outside Windows they are disabled and say so.
+ * Quick controls. Each opens an Islandy panel (inside the dashboard, using
+ * the island's `focused` state) showing real Windows state, with native
+ * controls where Windows supports them and Settings shortcuts otherwise.
+ * Pressing the control of the open panel closes it again. The last button
+ * opens Windows Settings itself (Windows only).
  */
 export function QuickControls() {
+  const activeWidget = useIsland((s) => s.activeWidget);
   const canOpen = useCanOpenSystemSettings();
+  const controls = useControls();
 
   return (
     <div
       role="group"
-      aria-label="Quick settings"
+      aria-label="Quick controls"
       className="flex items-center gap-0.5 rounded-full border border-hairline bg-surface-secondary p-0.5"
     >
-      {CONTROLS.map(({ page, label, icon }, i) => {
-        const last = i === CONTROLS.length - 1;
-        if (page === null) {
-          return (
-            <IconButton
-              key={label}
-              size="sm"
-              icon={icon}
-              label={`${label} (coming soon)`}
-              tooltip="Settings — coming soon"
-              tooltipAlign="end"
-              disabled
-            />
-          );
-        }
-        const tooltip = canOpen ? `${label} settings` : `${label} settings (Windows only)`;
+      {controls.map(({ panel, label, icon, status }) => {
+        const open = activeWidget === panel;
         return (
           <IconButton
-            key={label}
+            key={panel}
             size="sm"
             icon={icon}
-            label={canOpen ? `Open ${label} settings` : `${label} settings, available on Windows`}
-            tooltip={tooltip}
-            tooltipAlign={last ? "end" : "center"}
-            disabled={!canOpen}
+            label={status ? `${label}: ${status}` : label}
+            tooltip={open ? `Close ${label}` : status ? `${label} · ${status}` : label}
+            pressed={open}
             onClick={() => {
-              openSystemSettings(page).then(
-                () => {
-                  // Settings takes focus; get out of its way.
-                  dispatchIsland({ type: "DISMISS" });
-                },
-                (error: unknown) => {
-                  console.warn("[islandy] open_system_settings failed:", error);
-                },
+              dispatchIsland(
+                open ? { type: "CLOSE_WIDGET" } : { type: "OPEN_WIDGET", widget: panel },
               );
             }}
           />
         );
       })}
+      <IconButton
+        size="sm"
+        icon={Settings}
+        label={canOpen ? "Open Windows Settings" : "Windows Settings, available on Windows"}
+        tooltip={canOpen ? "Windows Settings" : "Windows Settings (Windows only)"}
+        tooltipAlign="end"
+        disabled={!canOpen}
+        onClick={() => {
+          openSettings("home");
+        }}
+      />
     </div>
   );
 }

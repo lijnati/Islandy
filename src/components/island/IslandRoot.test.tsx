@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { dispatchIsland, islandStore } from "../../features/island/island-store";
 import { initialMediaState, mediaStore } from "../../features/media/media-store";
 import { session, snapshot } from "../../features/media/media-test-utils";
+import { initialSystemState, systemStore } from "../../features/system/system-store";
 import { IslandRoot } from "./IslandRoot";
 
 beforeAll(() => {
@@ -18,6 +19,7 @@ afterEach(() => {
   });
   islandStore.dispose();
   mediaStore.setState(initialMediaState);
+  systemStore.setState(initialSystemState);
   vi.useRealTimers();
 });
 
@@ -83,17 +85,27 @@ describe("IslandRoot (browser mode, no native shell)", () => {
     expect(islandStore.getState().mode).toBe("expanded");
   });
 
-  it("quick controls are honest outside Windows: disabled, and say why", async () => {
+  it("quick controls open system panels in place and close them again", async () => {
     render(<IslandRoot />);
     fireEvent.click(screen.getByRole("button", { name: /Open dashboard/ }));
     await settle();
-    const wifi = screen.getByRole("button", { name: "Wi-Fi settings, available on Windows" });
-    expect(wifi.getAttribute("aria-disabled")).toBe("true");
-    expect(
-      screen
-        .getByRole("button", { name: "Islandy settings (coming soon)" })
-        .getAttribute("aria-disabled"),
-    ).toBe("true");
+    const sound = screen.getByRole("button", { name: "Sound" });
+    fireEvent.click(sound);
+    await settle();
+    expect(islandStore.getState()).toMatchObject({ mode: "focused", activeWidget: "audio" });
+    expect(screen.getByRole("heading", { name: "Sound" })).toBeDefined();
+    // Outside the desktop app the panel says so instead of showing fake values.
+    expect(screen.getAllByText(/Available in the Islandy desktop app on Windows/).length).toBe(1);
+    expect(screen.getByRole("button", { name: "Sound" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Sound" }));
+    await settle();
+    expect(islandStore.getState().mode).toBe("expanded");
+
+    // Windows Settings can only be opened on Windows; the button says so.
+    const settings = screen.getByRole("button", {
+      name: "Windows Settings, available on Windows",
+    });
+    expect(settings.getAttribute("aria-disabled")).toBe("true");
   });
 
   it("media widget says media is unavailable in a plain browser", async () => {

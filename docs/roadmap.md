@@ -62,12 +62,46 @@ browser and at least one other player.
 **Moved to Phase 3:** Core Audio volume/mute and output devices (they belong with the native
 system controls).
 
-## Phase 3: System controls and dashboard integration
+## Phase 3: System controls and dashboard integration ✅ (Windows runtime verification pending)
 
-- Core Audio: volume and mute with change notifications; read-only output device list.
-- Battery, network, CPU, and memory widgets (CPU and memory only while visible).
-- Fullscreen and exclusive-fullscreen detection: hide on that monitor.
-- Downloads-folder activity heuristic.
+- System service (`src-tauri/src/services/system/`):
+  - Three MTA workers (audio, monitor, display) publishing per-domain, revisioned updates
+    through one channel. Native callbacks only post messages.
+  - All callbacks and event tokens are unregistered on exit.
+- **Audio:**
+  - Core Audio master volume (Windows' scalar scale) and mute.
+  - Active output devices.
+  - External changes, default-device changes and device add/remove via
+    `IAudioEndpointVolumeCallback` and `IMMNotificationClient`.
+- **Power:** `GetSystemPowerStatus` normalized (no fake 100 % on desktops) and refreshed by
+  WinRT `PowerManager` events. Low/critical/plug/unplug alerts, once each.
+- **Metrics:** CPU (`GetSystemTimes` deltas) and memory (`GlobalMemoryStatusEx`), sampled
+  only while the System panel is open.
+- **Network:** NCSI connectivity (internet / limited / local / offline), connection type and
+  profile name; debounced lost/restored alerts.
+- **Radios:** Wi-Fi and Bluetooth state; switching via `Radio.SetStateAsync` only where
+  Windows grants access, otherwise a Settings link.
+- **Brightness:** WMI for built-in panels and DDC/CI for monitors; unsupported and
+  unreachable displays are reported as such.
+- **Settings:** an allow-list of seven `ms-settings:` pages.
+- **UI:**
+  - Functional quick controls opening Sound, System, Network, Bluetooth and Display panels
+    inside the existing `focused` state and frame.
+  - Coalesced, latest-wins sliders that never jump back to stale values.
+  - Non-optimistic toggles.
+  - Peeks for system alerts.
+- **Tests:** 45 Rust system tests (normalization, bounds, alert de-duplication, worker
+  behavior with fake backends) and system store/model/panel tests in Vitest.
+
+**Exit gate still open:** run the System section of the Windows checklist in `README.md` on a
+laptop and a desktop, ideally with a DDC/CI monitor.
+
+**Not done, by decision:** switching the default audio output. There is no documented API,
+and `IPolicyConfig` was rejected. Paired Bluetooth device lists were left out deliberately.
+
+**Moved to Phase 5:** fullscreen / exclusive-fullscreen detection (hide on that monitor).
+**Dropped for now:** the downloads-folder activity heuristic (it would need file-system
+watching that Phase 3 did not otherwise require).
 
 ## Phase 4: Developer workflow
 

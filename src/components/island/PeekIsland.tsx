@@ -1,11 +1,51 @@
-import { Check, Sparkle } from "lucide-react";
+import {
+  Battery,
+  BatteryLow,
+  Check,
+  Network,
+  Plug,
+  Sparkle,
+  Speaker,
+  Wifi,
+  WifiOff,
+  type LucideIcon,
+} from "lucide-react";
 
-import { dispatchIsland, type PeekContent } from "../../features/island/island-store";
+import {
+  dispatchIsland,
+  type PeekContent,
+  type PeekIcon,
+} from "../../features/island/island-store";
 import { MediaArtwork } from "../widgets/Artwork";
 import { ActivityBars } from "./ActivityBars";
 import { focusRing } from "../ui/IconButton";
 import { StatusIndicator } from "../ui/StatusIndicator";
 import { cx } from "../ui/cx";
+
+const PEEK_ICONS: Record<PeekIcon, LucideIcon> = {
+  battery: Battery,
+  batteryLow: BatteryLow,
+  plug: Plug,
+  wifi: Wifi,
+  network: Network,
+  offline: WifiOff,
+  speaker: Speaker,
+};
+
+function PeekGlyph({ peek }: { peek: PeekContent }) {
+  const Icon = peek.icon ? PEEK_ICONS[peek.icon] : peek.tone === "success" ? Check : Sparkle;
+  return (
+    <span
+      aria-hidden="true"
+      className={cx(
+        "flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-elevated",
+        peek.tone === "attention" ? "text-status-attention" : "text-fg",
+      )}
+    >
+      <Icon size={15} strokeWidth={2} />
+    </span>
+  );
+}
 
 /** A temporary contextual capsule. Announced politely to screen readers. */
 export function PeekIsland({ peek }: { peek: PeekContent }) {
@@ -27,16 +67,7 @@ export function PeekIsland({ peek }: { peek: PeekContent }) {
           className="size-8 shadow-none"
         />
       ) : (
-        <span
-          aria-hidden="true"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-elevated text-fg"
-        >
-          {peek.tone === "success" ? (
-            <Check size={15} strokeWidth={2.25} />
-          ) : (
-            <Sparkle size={14} strokeWidth={2} />
-          )}
-        </span>
+        <PeekGlyph peek={peek} />
       )}
       <span role="status" className="flex min-w-0 flex-1 flex-col items-start text-left">
         <span className="text-caption font-medium text-fg-muted">{peek.source}</span>

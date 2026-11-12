@@ -10,9 +10,20 @@ import type { IslandSignal } from "../../services/types";
 import { DEMO_PEEK } from "../activity/demo-activity";
 import { peekForChange } from "../media/media-model";
 import { mediaStore } from "../media/media-store";
-import { dispatchIsland, islandStore } from "./island-store";
+import { alertToPeek } from "../system/system-model";
+import { systemStore } from "../system/system-store";
+import type { SystemFocus } from "../../services/types";
+import { dispatchIsland, islandStore, type IslandState } from "./island-store";
 import { refreshLayouts } from "./layouts";
 import { nativeStatusStore } from "./native-status";
+
+/** Which system view is visible: drives native CPU/RAM and brightness polling. */
+export function systemFocusFor(state: Pick<IslandState, "mode" | "activeWidget">): SystemFocus {
+  if (state.mode !== "focused") return "none";
+  if (state.activeWidget === "system") return "overview";
+  if (state.activeWidget === "display") return "display";
+  return "none";
+}
 
 function onSignal(signal: IslandSignal) {
   switch (signal.type) {
@@ -108,5 +119,27 @@ export function useNativeBridge(): void {
       previous = next;
       if (peek) dispatchIsland({ type: "CONTEXT_EVENT", peek });
     });
+  }, []);
+
+  // System: connect once; tell Rust what is visible (sampling runs only
+  // while a panel needs it); turn de-duplicated alerts into peeks. The
+  // island state machine drops peeks while the dashboard is open, so they
+  // never interrupt the user.
+  useEffect(() => {
+    const system = systemStore.getState();
+    system.start();
+    const sync = (state: IslandState) => {
+      systemStore.getState().setFocus(systemFocusFor(state));
+    };
+    sync(islandStore.getState());
+    const unsubscribeIsland = islandStore.subscribe(sync);
+    const unsubscribeAlerts = system.onAlert((alert) => {
+      dispatchIsland({ type: "CONTEXT_EVENT", peek: alertToPeek(alert) });
+    });
+    return () => {
+      unsubscribeIsland();
+      unsubscribeAlerts();
+      systemStore.getState().setFocus("none");
+    };
   }, []);
 }

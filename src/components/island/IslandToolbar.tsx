@@ -11,6 +11,11 @@ const WIDGET_TITLES: Record<WidgetId, string> = {
   media: "Now Playing",
   calendar: "Calendar",
   activity: "Activity",
+  audio: "Sound",
+  system: "System",
+  network: "Network",
+  bluetooth: "Bluetooth",
+  display: "Display",
 };
 
 export function IslandToolbar() {

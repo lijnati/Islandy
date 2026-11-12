@@ -122,7 +122,10 @@ Caveats:
 - Session objects returned by `GetSessions()` are matched to stable ids by COM identity; the
   AUMID is not a session id (one browser can own several sessions).
 
-## Audio: Windows Core Audio
+## Audio: Windows Core Audio (Phase 3: implemented, unverified on Windows)
+
+Implemented in `src-tauri/src/services/system/windows/audio.rs`; behavior and decisions in
+[system.md](system.md). The notes below are the original research and still apply.
 
 Win32 COM (MMDevice + EndpointVolume); `windows` crate features `Win32_Media_Audio`,
 `Win32_Media_Audio_Endpoints`, `Win32_System_Com`, `Win32_UI_Shell_PropertiesSystem`,
@@ -148,7 +151,19 @@ Caveats:
 - COM must be initialized on the thread that owns these objects (a dedicated audio thread
   with `CoInitializeEx(COINIT_MULTITHREADED)`).
 
-## System status
+## System status (Phase 3: implemented, unverified on Windows)
+
+Implemented as follows (details in [system.md](system.md)):
+
+- **Battery:** `GetSystemPowerStatus` for one consistent reading, which also reports "no
+  system battery". It is re-read on the `PowerManager` events.
+- **CPU and memory:** `GetSystemTimes` and `GlobalMemoryStatusEx`. No `sysinfo` dependency.
+- **Network:** `NetworkInformation`, with the `NetworkStatusChanged` event.
+- **Radios:** Wi-Fi and Bluetooth via `Windows.Devices.Radios`.
+- **Brightness:** WMI `WmiMonitorBrightness*` for built-in panels and the DDC/CI Monitor
+  Configuration API for external monitors.
+
+Original research:
 
 | Metric    | Recommended API                                                                                                                                                                                                                                                                   | Update model                                                   |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |

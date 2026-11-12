@@ -17,7 +17,15 @@ use crate::{
             worker::Request,
             MediaService,
         },
-        system_settings::{self, SettingsPage},
+        system::{
+            audio::AudioRequest,
+            display::{DisplayId, DisplayRequest},
+            models::{RadioKind, SystemFocus, SystemSnapshot, SystemUpdate},
+            monitor::MonitorRequest,
+            parse_percent,
+            settings::{self as system_settings, SettingsPage},
+            SystemRequest, SystemService,
+        },
     },
     shortcut::ShortcutStatus,
     signals::{self, IslandSignal, SignalHub},
@@ -161,4 +169,80 @@ pub fn get_media_artwork(media: State<'_, MediaService>, key: String) -> Result<
         return Err(IslandyError::InvalidArgument("invalid artwork key"));
     }
     Ok(media.artwork(&key))
+}
+
+/* -------------------------------------------------------------------------- */
+/* System (audio, power, network, radios, metrics, brightness). Commands that */
+/* change something are async and run on the owning worker; they return once */
+/* Windows accepted the request. The resulting state arrives on the channel.  */
+/* -------------------------------------------------------------------------- */
+
+/// Registers the system channel and returns the current snapshot atomically.
+#[tauri::command]
+pub fn connect_system(
+    system: State<'_, SystemService>,
+    channel: Channel<SystemUpdate>,
+) -> SystemSnapshot {
+    system.connect(move |update| {
+        if let Err(e) = channel.send(update) {
+            eprintln!("[islandy] failed to deliver system update: {e}");
+        }
+    })
+}
+
+#[tauri::command]
+pub fn get_system_snapshot(system: State<'_, SystemService>) -> SystemSnapshot {
+    system.snapshot()
+}
+
+/// What the UI shows: starts/stops CPU/RAM sampling and brightness polling.
+#[tauri::command]
+pub fn set_system_focus(system: State<'_, SystemService>, focus: SystemFocus) {
+    system.set_focus(focus);
+}
+
+/// Sets the default output's master volume, 0–100 (Windows' own scale).
+#[tauri::command]
+pub async fn set_master_volume(system: State<'_, SystemService>, volume: f64) -> Result<()> {
+    let volume =
+        parse_percent(volume).ok_or(IslandyError::InvalidArgument("volume must be 0–100"))?;
+    Ok(system
+        .request(SystemRequest::Audio(AudioRequest::SetVolume(volume)))
+        .await?)
+}
+
+#[tauri::command]
+pub async fn set_audio_muted(system: State<'_, SystemService>, muted: bool) -> Result<()> {
+    Ok(system
+        .request(SystemRequest::Audio(AudioRequest::SetMuted(muted)))
+        .await?)
+}
+
+/// Switches the Wi-Fi or Bluetooth radio, if Windows granted access.
+#[tauri::command]
+pub async fn set_radio_state(
+    system: State<'_, SystemService>,
+    radio: RadioKind,
+    on: bool,
+) -> Result<()> {
+    Ok(system
+        .request(SystemRequest::Monitor(MonitorRequest::SetRadio(radio, on)))
+        .await?)
+}
+
+#[tauri::command]
+pub async fn set_display_brightness(
+    system: State<'_, SystemService>,
+    display_id: String,
+    brightness: f64,
+) -> Result<()> {
+    let id =
+        DisplayId::parse(&display_id).ok_or(IslandyError::InvalidArgument("unknown display id"))?;
+    let brightness = parse_percent(brightness)
+        .ok_or(IslandyError::InvalidArgument("brightness must be 0–100"))?;
+    Ok(system
+        .request(SystemRequest::Display(DisplayRequest::SetBrightness(
+            id, brightness,
+        )))
+        .await?)
 }
