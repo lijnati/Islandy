@@ -1,0 +1,75 @@
+name: Update test
+
+# End-to-end check of automatic updates on a real Windows machine: installs an older
+# published release, starts it, and waits for it to update itself to the latest release
+# (check → download → signature check → install while the user is away → restart).
+# Run it from the Actions tab after publishing a release.
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "Release tag to install first (it must be older than the latest release)"
+        required: true
+        default: "v0.2.1"
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      FROM: ${{ github.event.inputs.from }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the old installer
+        shell: pwsh
+        run: |
+          gh release download $env:FROM --repo $env:GITHUB_REPOSITORY --pattern "*-setup.exe" --dir old
+          Get-ChildItem old
+          $latest = gh release view --repo $env:GITHUB_REPOSITORY --json tagName --jq .tagName
+          "LATEST=$($latest.TrimStart('v'))" >> $env:GITHUB_ENV
+          Write-Host "Updating $env:FROM -> $latest"
+
+      - name: Install it silently
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem old -Filter *-setup.exe).FullName
+          Start-Process -FilePath $setup -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter islandy.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch "\\Temp\\" } | Select-Object -First 1
+          if (-not $exe) { throw "Islandy wasn't installed" }
+          Write-Host "Installed: $($exe.FullName) $($exe.VersionInfo.ProductVersion)"
+          "EXE=$($exe.FullName)" >> $env:GITHUB_ENV
+
+      - name: Start it and wait for the update
+        shell: pwsh
+        run: |
+          Start-Process -FilePath $env:EXE
+          $deadline = (Get-Date).AddMinutes(20)
+          $log = Join-Path $env:LOCALAPPDATA "com.islandy.desktop\logs\islandy.log"
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 30
+            $version = (Get-Item $env:EXE).VersionInfo.ProductVersion
+            $running = @(Get-Process islandy -ErrorAction SilentlyContinue).Count
+            $idle = [Environment]::TickCount
+            Write-Host "$(Get-Date -Format T)  installed=$version  running=$running"
+            if ($version -eq $env:LATEST) {
+              Start-Sleep -Seconds 15
+              $running = @(Get-Process islandy -ErrorAction SilentlyContinue).Count
+              Write-Host "Updated to $version; running after restart: $running"
+              if ($running -lt 1) { throw "Updated, but Islandy didn't start again" }
+              exit 0
+            }
+          }
+          throw "No update to $env:LATEST within 20 minutes"
+
+      - name: Islandy's log
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:LOCALAPPDATA\com.islandy.desktop" -Recurse -ErrorAction SilentlyContinue |
+            Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 300
+          Get-ChildItem "$env:LOCALAPPDATA\com.islandy.desktop" -Recurse -Filter *.log -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "==== $($_.FullName)"; Get-Content $_.FullName -Tail 80 }
