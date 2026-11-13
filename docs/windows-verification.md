@@ -149,3 +149,57 @@ build) and tick each item. Record hardware, scaling and app versions next to fai
 - [ ] Offline: "Couldn't reach the update server", no crash, retry later works.
 - [ ] Weather: search a place, choose it (widget turns on), °C/°F switch, forecast matches a
       weather site; offline shows the error with **Try again**; removing the place stops requests.
+
+**0.3 features (about 15 minutes, on the installed release)**
+
+Claude logo on the island
+
+- [ ] With music playing, the resting island shows: artwork · time · orange Claude logo · music
+      bars. The logo breathes slowly.
+- [ ] Ask Claude Code something: the island switches to "project · Working" and the logo turns.
+- [ ] Click the logo: the Claude panel opens. Click the clock instead: the normal dashboard opens.
+- [ ] Windows Settings › Accessibility › Visual effects › Animation effects **off**: the logo
+      holds still.
+
+Answering permission requests
+
+- [ ] Settings › Integrations: the hooks show "Hooks need repair" (if they were installed
+      before 0.3) → **Repair** → "Hooks installed".
+- [ ] Turn on **Answer permission requests on the island**. Start a **new** Claude Code session
+      in default permission mode and ask it to run a harmless command (e.g. `git status`).
+- [ ] The Claude panel shows "Claude wants to run" with the command and a countdown.
+      **Allow once** → the command runs in Claude Code.
+- [ ] Ask again → **Deny** → Claude Code reports the command was denied ("Denied from Islandy.").
+- [ ] Ask again → don't answer → after about 30 s Claude Code asks in its own prompt.
+- [ ] Ask again → **Answer in Claude Code** → its own prompt appears right away.
+- [ ] Record: while the island waits, does Claude Code's own prompt appear at once, or only
+      after the island answers or gives up?
+- [ ] A multi-line command (or an MCP tool) shows no **Allow once**, only Deny.
+
+Usage glance
+
+- [ ] After a few turns, the Claude panel header shows "Since Islandy started: N turns · …
+      working · needed you …×", and the session line shows its own turns.
+
+Weather location
+
+- [ ] Settings › Widgets › Weather › **Use my location**: Windows may ask for permission; the
+      place becomes "Current location" with rounded coordinates and the forecast loads.
+- [ ] With Windows location turned off (Settings › Privacy & security › Location), the button
+      shows a clear message about turning it on.
+
+Claude Desktop
+
+- [ ] While Claude Desktop writes a reply, the island shows "Claude Desktop · Working"; when
+      it finishes, a "Claude finished responding" peek appears. If Claude Desktop is set to a
+      language other than English, note the language and whether this works.
+
+Welcome page and updates
+
+- [ ] Upgrading kept your settings, and the welcome page did **not** appear.
+- [ ] (Optional, on a spare PC or user account) a fresh install shows the welcome page once;
+      **Done** closes it for good; Settings › About › **Show welcome** reopens it.
+- [ ] Settings › About shows the current version and "Up to date" after **Check for updates**.
+
+Report anything that fails with what you saw (a screenshot helps) and the Islandy version from
+Settings › About.
