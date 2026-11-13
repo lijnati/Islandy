@@ -40,7 +40,21 @@ impl SettingsPage {
     }
 }
 
-/// Opens (or focuses) the settings window on `page`.
+/// Opens the settings window from an event handler on the main thread (tray
+/// menu, second launch). The window is created on a worker thread: Tauri
+/// hands the creation to the event loop, which must not be blocked by the
+/// caller while the new WebView2 initializes.
+pub fn open_detached<R: Runtime>(app: &AppHandle<R>, page: SettingsPage) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = open(&app, page) {
+            crate::log_error!("settings", "could not open settings: {e}");
+        }
+    });
+}
+
+/// Opens (or focuses) the settings window on `page`. Never call it
+/// synchronously on the main thread (use `open_detached` there).
 pub fn open<R: Runtime>(app: &AppHandle<R>, page: SettingsPage) -> Result<()> {
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
         let _ = window.unminimize();

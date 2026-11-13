@@ -135,9 +135,7 @@ fn on_menu<R: Runtime>(app: &AppHandle<R>, id: &str) {
 }
 
 fn open_settings<R: Runtime>(app: &AppHandle<R>, page: SettingsPage) {
-    if let Err(e) = settings_window::open(app, page) {
-        crate::log_error!("tray", "could not open settings: {e}");
-    }
+    settings_window::open_detached(app, page);
 }
 
 pub fn set_quiet_checked<R: Runtime>(app: &AppHandle<R>, quiet: bool) {

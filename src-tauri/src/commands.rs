@@ -510,8 +510,14 @@ pub fn set_island_visible<R: Runtime>(app: AppHandle<R>, visible: bool) {
     app::set_island_visible(&app, visible);
 }
 
+/// Async on purpose: a synchronous command runs on the main thread inside a
+/// WebView2 callback, and creating another WebView2 window there deadlocks on
+/// Windows (black, unresponsive window that can't be closed). See wry#583.
 #[tauri::command]
-pub fn open_settings_window<R: Runtime>(app: AppHandle<R>, page: Option<WindowPage>) -> Result<()> {
+pub async fn open_settings_window<R: Runtime>(
+    app: AppHandle<R>,
+    page: Option<WindowPage>,
+) -> Result<()> {
     settings_window::open(&app, page.unwrap_or_default())
 }
 

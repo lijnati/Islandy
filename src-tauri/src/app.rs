@@ -74,9 +74,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             crate::log_info!("app", "second launch: showing settings");
             set_island_visible(app, true);
-            if let Err(e) = settings_window::open(app, SettingsPage::General) {
-                crate::log_warn!("app", "could not open settings: {e}");
-            }
+            settings_window::open_detached(app, SettingsPage::General);
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(WindowState::new(
