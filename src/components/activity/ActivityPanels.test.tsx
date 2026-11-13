@@ -311,3 +311,30 @@ describe("permission requests on the island", () => {
     ).toBeTruthy();
   });
 });
+
+describe("Claude mark in the resting pill", () => {
+  const mark = () => document.querySelector("svg[data-state]");
+
+  it("sits between the clock and the playback bars, orange and breathing at rest", () => {
+    load(snapshot({ sessions: [] }));
+    render(<CollapsedIsland />);
+    const glyph = mark();
+    expect(glyph?.getAttribute("data-state")).toBe("idle");
+    expect(glyph?.getAttribute("class")).toContain("text-claude");
+    expect(glyph?.getAttribute("class")).toContain("animate-glyph-idle");
+    expect(glyph?.previousElementSibling?.querySelector("time")).toBeTruthy();
+  });
+
+  it("is hidden with the Claude source off", () => {
+    load(
+      snapshot({
+        settings: {
+          ...DEFAULT_ACTIVITY_SETTINGS,
+          sources: { claudeCode: false, developer: true, system: true },
+        },
+      }),
+    );
+    render(<CollapsedIsland />);
+    expect(mark()).toBeNull();
+  });
+});

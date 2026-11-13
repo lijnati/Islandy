@@ -88,6 +88,32 @@
   --animate-bar: island-bar 1.1s ease-in-out infinite;
   /* Claude "working" mark: a turn that breathes (transform only) */
   --animate-glyph: island-glyph 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  /* Claude mark at rest in the pill: a slow, small breath with a slight tilt */
+  --animate-glyph-idle: island-glyph-idle 4.8s ease-in-out infinite;
+  /* Claude asking for the user: a soft pulse (no turning) */
+  --animate-glyph-attention: island-glyph-attention 1.6s ease-in-out infinite;
+
+  @keyframes island-glyph-idle {
+    0%,
+    100% {
+      transform: rotate(0deg) scale(1);
+    }
+    50% {
+      transform: rotate(14deg) scale(0.86);
+    }
+  }
+
+  @keyframes island-glyph-attention {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(0.82);
+      opacity: 0.7;
+    }
+  }
 
   @keyframes island-glyph {
     0% {

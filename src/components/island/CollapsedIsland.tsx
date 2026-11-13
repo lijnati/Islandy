@@ -1,6 +1,12 @@
 import { Moon, Sparkle } from "lucide-react";
 
-import { ambientLabel, needsAttention, type Ambient } from "../../features/activity/activity-model";
+import {
+  ambientLabel,
+  isWorking,
+  needsAttention,
+  type Ambient,
+} from "../../features/activity/activity-model";
+import { useActivity } from "../../features/activity/activity-store";
 import { useAmbient, useQuiet } from "../../features/activity/use-ambient";
 import { dispatchIsland } from "../../features/island/island-store";
 import { useDragReposition } from "../../features/island/use-drag-reposition";
@@ -9,7 +15,7 @@ import { displayTitle, isActive, isPlaying } from "../../features/media/media-mo
 import { useSelectedSession } from "../../features/media/media-store";
 import { useNow } from "../../hooks/useNow";
 import { ACTIVITY_ICONS } from "../activity/icons";
-import { ClaudeGlyph } from "../activity/ClaudeGlyph";
+import { ClaudeGlyph, type GlyphState } from "../activity/ClaudeGlyph";
 import { MediaArtwork } from "../widgets/Artwork";
 import { focusRing } from "../ui/IconButton";
 import { cx } from "../ui/cx";
@@ -54,6 +60,18 @@ function AmbientContent({ ambient }: { ambient: Ambient }) {
   );
 }
 
+/** Claude's overall state for the resting pill, or `null` with the Claude source off. */
+function useClaudeState(): GlyphState | null {
+  return useActivity((s) => {
+    const snapshot = s.snapshot;
+    if (snapshot && !snapshot.settings.sources.claudeCode) return null;
+    const sessions = snapshot?.sessions ?? [];
+    if (sessions.some(needsAttention)) return "attention";
+    if (sessions.some(isWorking)) return "working";
+    return "idle";
+  });
+}
+
 function ambientSpeech(a: Ambient): string {
   const { primary, secondary } = ambientLabel(a);
   if (a.kind === "claude" && a.active === 1) {
@@ -63,7 +81,10 @@ function ambientSpeech(a: Ambient): string {
 }
 
 /**
- * The resting pill: (ambient glyph | track artwork) · time · playback indicator.
+ * The resting pill: (ambient glyph | track artwork) · time · Claude mark ·
+ * playback indicator. The Claude mark is orange and breathes slowly at rest,
+ * turns while Claude works and pulses amber when it needs you (hidden with
+ * the Claude source off; still with reduced motion).
  * With an active media session the glyph becomes the artwork thumbnail and
  * the bars animate while it plays (a playback-state animation, not an audio
  * visualization). While a Claude Code session works or needs attention (or a
@@ -76,6 +97,7 @@ export function CollapsedIsland() {
   const session = useSelectedSession();
   const ambient = useAmbient();
   const quiet = useQuiet();
+  const claude = useClaudeState();
   const { handlers, consumeDragClick } = useDragReposition();
   const media = isActive(session) ? session : null;
   const playing = isPlaying(media);
@@ -144,6 +166,7 @@ export function CollapsedIsland() {
             {quiet && media && <QuietMark />}
             {timeEl}
           </span>
+          {claude && <ClaudeGlyph state={claude} size={15} brand />}
           <ActivityBars active={playing} />
         </>
       )}

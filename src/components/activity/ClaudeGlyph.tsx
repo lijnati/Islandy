@@ -10,16 +10,19 @@ const CLAUDE_MARK =
 /**
  * The Claude status glyph: Claude's mark in its brand colour. While a session
  * works it turns and breathes (compositor-only `transform`, off with reduced
- * motion); it is amber and still when Claude asks for attention, and muted
- * otherwise.
+ * motion); it is amber when Claude asks for attention, and muted otherwise.
+ * `brand` (the resting pill) keeps it orange at rest with a slow breath, and
+ * makes the attention state pulse.
  */
 export function ClaudeGlyph({
   state,
   size = 14,
+  brand = false,
   className,
 }: {
   state: GlyphState;
   size?: number;
+  brand?: boolean;
   className?: string;
 }) {
   const reduce = usePrefersReducedMotion();
@@ -35,10 +38,12 @@ export function ClaudeGlyph({
         "shrink-0",
         state === "attention"
           ? "text-status-waiting"
-          : state === "working"
+          : state === "working" || brand
             ? "text-claude"
             : "text-fg-muted",
-        state === "working" && !reduce && "animate-glyph",
+        !reduce && state === "working" && "animate-glyph",
+        !reduce && brand && state === "idle" && "animate-glyph-idle",
+        !reduce && brand && state === "attention" && "animate-glyph-attention",
         className,
       )}
     >

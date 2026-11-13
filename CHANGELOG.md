@@ -4,6 +4,14 @@ All notable changes to Islandy. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- The resting island shows Claude's orange mark between the clock and the playback bars. It
+  breathes slowly at rest, turns while Claude works and pulses amber when Claude needs you
+  (still with reduced motion; hidden when the Claude source is off).
+
 ## [0.3.0] — 2026-11-13
 
 ### Added
