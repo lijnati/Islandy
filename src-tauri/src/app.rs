@@ -122,6 +122,7 @@ pub fn run() {
             commands::get_activity_snapshot,
             commands::dismiss_activity,
             commands::answer_permission,
+            commands::preview_notification_sound,
             commands::clear_activity_history,
             commands::set_quiet_mode,
             commands::set_activity_source,

@@ -9,6 +9,7 @@ import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import type {
   ActivitySettings,
   PermissionDecision,
+  SoundVolume,
   ActivitySnapshot,
   ActivitySource,
   ActivityUpdate,
@@ -264,6 +265,11 @@ export function getActivitySnapshot(): Promise<ActivitySnapshot> {
 /** Dismisses an active event, or removes a finished one from history. */
 export function dismissActivity(id: string): Promise<void> {
   return call<undefined>("dismiss_activity", { id });
+}
+
+/** Plays the notification chime once (settings preview). */
+export function previewNotificationSound(volume: SoundVolume): Promise<void> {
+  return call<undefined>("preview_notification_sound", { volume });
 }
 
 /** Answers a Claude Code permission request shown on the island. */

@@ -475,6 +475,11 @@ impl Worker {
             self.publish_at = Some(Instant::now() + PUBLISH_DELAY);
         }
         if let Some(peek) = outcome.peek {
+            // Something new lands on the island: the chime, if wanted.
+            let settings = self.engine.settings();
+            if settings.sound {
+                crate::services::sound::play(settings.sound_volume);
+            }
             self.hub.peek(ActivityUpdate::Peek { peek });
         }
     }

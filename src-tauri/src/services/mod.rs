@@ -6,6 +6,7 @@ pub mod diagnostics;
 pub mod media;
 pub mod paths;
 pub mod settings;
+pub mod sound;
 pub mod startup;
 pub mod system;
 pub mod updates;

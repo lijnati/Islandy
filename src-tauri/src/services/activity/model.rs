@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::services::sound::SoundVolume;
+
 /// Where an activity came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -348,6 +350,10 @@ pub struct ActivitySettings {
     pub retention_days: u8,
     /// Permission requests can be answered (Allow / Deny) on the island.
     pub answer_permissions: bool,
+    /// A short chime when something new peeks on the island (activity
+    /// peeks only; quiet mode and the per-source peek switches apply).
+    pub sound: bool,
+    pub sound_volume: SoundVolume,
 }
 
 impl Default for ActivitySettings {
@@ -359,6 +365,8 @@ impl Default for ActivitySettings {
             peek_duration: PeekDuration::default(),
             retention_days: 7,
             answer_permissions: false,
+            sound: true,
+            sound_volume: SoundVolume::default(),
         }
     }
 }
@@ -499,5 +507,19 @@ mod tests {
         let s: ActivitySettings =
             serde_json::from_value(serde_json::json!({ "retentionDays": 200 })).unwrap();
         assert_eq!(s.normalized().retention_days, 30);
+    }
+
+    #[test]
+    fn settings_from_0_3_turn_the_sound_on_at_normal_volume() {
+        let old: ActivitySettings =
+            serde_json::from_value(serde_json::json!({ "quiet": false, "retentionDays": 7 }))
+                .unwrap();
+        assert!(old.sound);
+        assert_eq!(old.sound_volume, SoundVolume::Normal);
+        let soft: ActivitySettings =
+            serde_json::from_value(serde_json::json!({ "sound": false, "soundVolume": "soft" }))
+                .unwrap();
+        assert!(!soft.sound);
+        assert_eq!(soft.sound_volume, SoundVolume::Soft);
     }
 }

@@ -23,6 +23,7 @@ export {
   listMonitors,
   openIslandyFolder,
   openSettingsWindow,
+  previewNotificationSound,
   previewIslandOffset,
   resetSettings,
   setIslandVisible,

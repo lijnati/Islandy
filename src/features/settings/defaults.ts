@@ -70,4 +70,6 @@ export const DEFAULT_ACTIVITY_SETTINGS: ActivitySettings = {
   peekDuration: "standard",
   retentionDays: 7,
   answerPermissions: false,
+  sound: true,
+  soundVolume: "normal",
 };

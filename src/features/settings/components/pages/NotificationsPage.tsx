@@ -4,11 +4,13 @@ import type {
   ActivitySettings,
   PeekDuration,
   PeekToggles,
+  SoundVolume,
   SourceToggles,
 } from "../../../../services/types";
 import { DEFAULT_ACTIVITY_SETTINGS } from "../../defaults";
 import { useActivitySettings } from "../../use-activity-settings";
-import { PageHeader, Row, Section, Segmented } from "../controls";
+import { previewNotificationSound } from "../../settings-service";
+import { Button, PageHeader, Row, Section, Segmented } from "../controls";
 
 export function NotificationsPage() {
   const { settings, update, ready } = useActivitySettings();
@@ -158,6 +160,55 @@ export function NotificationsPage() {
                 { value: "long", label: "Long" },
               ]}
             />
+          }
+        />
+      </Section>
+
+      <Section
+        title="Sound"
+        footer="Plays with activity peeks only (not track changes), so quiet mode and the switches above apply. It follows the System sounds volume in the Windows volume mixer."
+      >
+        <Row
+          label="Notification sound"
+          description="A soft two-note chime when something new lands on the island."
+          control={
+            <Switch
+              label="Notification sound"
+              checked={s.sound}
+              disabled={disabled}
+              onChange={(on) => {
+                update({ ...s, sound: on });
+              }}
+            />
+          }
+        />
+        <Row
+          label="Volume"
+          control={
+            <div className="flex items-center gap-2">
+              <Segmented<SoundVolume>
+                label="Sound volume"
+                value={s.soundVolume}
+                disabled={disabled || !s.sound}
+                onChange={(v) => {
+                  update({ ...s, soundVolume: v });
+                  void previewNotificationSound(v).catch(() => undefined);
+                }}
+                options={[
+                  { value: "soft", label: "Soft" },
+                  { value: "normal", label: "Normal" },
+                  { value: "loud", label: "Loud" },
+                ]}
+              />
+              <Button
+                disabled={!isNativeAvailable()}
+                onClick={() => {
+                  void previewNotificationSound(s.soundVolume).catch(() => undefined);
+                }}
+              >
+                Play
+              </Button>
+            </div>
           }
         />
       </Section>

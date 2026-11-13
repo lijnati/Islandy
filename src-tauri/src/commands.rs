@@ -312,6 +312,12 @@ pub fn dismiss_activity(activity: State<'_, ActivityService>, id: String) -> Res
     Ok(())
 }
 
+/// Plays the notification chime once (Settings › Notifications preview).
+#[tauri::command]
+pub fn preview_notification_sound(volume: crate::services::sound::SoundVolume) {
+    crate::services::sound::play(volume);
+}
+
 /// The user's answer to a Claude Code permission request shown on the
 /// island. Only an open question of that session can be answered.
 #[tauri::command]

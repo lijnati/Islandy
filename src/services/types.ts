@@ -438,7 +438,13 @@ export interface ActivitySettings {
   retentionDays: number;
   /** Claude Code permission requests can be answered on the island. */
   answerPermissions: boolean;
+  /** A short chime when something new peeks on the island. */
+  sound: boolean;
+  soundVolume: SoundVolume;
 }
+
+/** Mirrors `sound::SoundVolume`. */
+export type SoundVolume = "soft" | "normal" | "loud";
 
 export interface LastReceived {
   claudeCode: number | null;

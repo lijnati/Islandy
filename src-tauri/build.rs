@@ -28,6 +28,7 @@ fn main() {
             "get_activity_snapshot",
             "dismiss_activity",
             "answer_permission",
+            "preview_notification_sound",
             "clear_activity_history",
             "set_quiet_mode",
             "set_activity_source",

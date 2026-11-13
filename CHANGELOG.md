@@ -4,6 +4,17 @@ All notable changes to Islandy. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Notification sound**: a soft two-note chime (synthesized by Islandy, no audio file) when
+  something new lands on the island: Claude finished or needs you, a failed build, a system
+  alert, an update. On by default; Settings › Notifications › Sound has the switch, Soft /
+  Normal / Loud and a Play button. It plays with activity peeks only (not track changes), so
+  quiet mode and the per-source peek switches apply, and it follows the Windows "System
+  sounds" volume.
+
 ## [0.3.1] — 2026-11-13
 
 ### Changed
