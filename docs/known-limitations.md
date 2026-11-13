@@ -45,3 +45,6 @@
   geolocation). Forecast quality is Open-Meteo's.
 - **Updates** install only from full GitHub releases (not pre-releases), need the signing secrets
   in CI, and are installed while idle only on Windows (elsewhere: on request).
+- **Claude Desktop detection** depends on the English accessible name of Claude's "Stop response"
+  button, so it may miss other UI languages or future Claude Desktop changes. It has not yet
+  been verified on real Windows hardware.

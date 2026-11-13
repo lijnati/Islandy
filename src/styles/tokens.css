@@ -32,6 +32,7 @@
   --color-status-neutral: #909090;
   --color-status-working: #e8b44c;
   --color-status-waiting: #f2b84b; /* needs the user (Claude Code requests) */
+  --color-claude: #d97757; /* Claude brand colour, for the Claude mark only */
   --color-status-success: #5bd08a;
   --color-status-attention: #ff7a5c;
 
@@ -85,12 +86,18 @@
 
   /* Activity indicator bars */
   --animate-bar: island-bar 1.1s ease-in-out infinite;
-  /* Claude Code "working" glyph: a slow turn (transform only) */
-  --animate-glyph: island-glyph 3.2s linear infinite;
+  /* Claude "working" mark: a turn that breathes (transform only) */
+  --animate-glyph: island-glyph 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 
   @keyframes island-glyph {
-    to {
-      transform: rotate(360deg);
+    0% {
+      transform: rotate(0deg) scale(1);
+    }
+    50% {
+      transform: rotate(180deg) scale(0.78);
+    }
+    100% {
+      transform: rotate(360deg) scale(1);
     }
   }
 

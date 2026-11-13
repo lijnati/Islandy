@@ -57,9 +57,9 @@ function AmbientContent({ ambient }: { ambient: Ambient }) {
 function ambientSpeech(a: Ambient): string {
   const { primary, secondary } = ambientLabel(a);
   if (a.kind === "claude" && a.active === 1) {
-    return `Claude Code, ${primary}: ${needsAttention(a.session) ? "needs attention" : secondary}`;
+    return `Claude, ${primary}: ${needsAttention(a.session) ? "needs attention" : secondary}`;
   }
-  return a.kind === "claude" ? `Claude Code, ${primary}, ${secondary}` : `${primary}: ${secondary}`;
+  return a.kind === "claude" ? `Claude, ${primary}, ${secondary}` : `${primary}: ${secondary}`;
 }
 
 /**

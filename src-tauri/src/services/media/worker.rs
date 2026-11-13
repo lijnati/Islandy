@@ -707,10 +707,7 @@ mod tests {
         assert!(h.request(Request::Seek(S1, 5_000)).is_ok());
         let fake = h.stop();
         let f = fake.lock().unwrap();
-        assert_eq!(
-            f.executed,
-            [NativeAction::Next, NativeAction::TogglePlayPause]
-        );
+        assert_eq!(f.executed, [NativeAction::Next, NativeAction::Play]);
         assert_eq!(f.seeks, [5_000]);
     }
 

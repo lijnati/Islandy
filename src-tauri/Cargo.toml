@@ -1,6 +1,6 @@
 [package]
 name = "islandy"
-version = "0.2.0"
+version = "0.2.1"
 description = "A beautiful, context-aware Dynamic Island for Windows."
 authors = ["Islandy contributors"]
 license = "UNLICENSED"
@@ -59,6 +59,7 @@ windows = { version = "0.62", features = [
   "Win32_System_Threading",
   "Win32_System_Variant",
   "Win32_System_Wmi",
+  "Win32_UI_Accessibility",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_Shell",
   "Win32_UI_Shell_PropertiesSystem",

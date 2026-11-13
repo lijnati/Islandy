@@ -174,6 +174,25 @@ function ClaudeSection() {
   );
 }
 
+/** Claude Desktop (the chat app) has no hooks; Islandy watches its window. */
+function ClaudeDesktopSection() {
+  return (
+    <Section
+      title="Claude Desktop"
+      description="Nothing to install. While Claude Desktop writes a reply, Islandy shows it on the island and tells you when it's done. It only checks whether Claude's “Stop response” button is on screen, using Windows UI Automation. It never reads your chats."
+    >
+      <Row
+        label="Code tab"
+        description="Claude Code sessions in Claude Desktop use the hooks above, like the terminal. Install them once, then start a new session."
+      />
+      <Row
+        label="Turn off"
+        description="Turn off the “Claude Code” source in Notifications to stop both."
+      />
+    </Section>
+  );
+}
+
 function DeveloperSection() {
   const activity = useNativeQuery(getActivitySnapshot, { pollMs: 3000 });
   const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
@@ -363,6 +382,7 @@ export function IntegrationsPage() {
         description="Everything Islandy connects to, and whether it works on this PC. Nothing here leaves your device."
       />
       <ClaudeSection />
+      <ClaudeDesktopSection />
       <DeveloperSection />
       <NativeSection />
     </div>

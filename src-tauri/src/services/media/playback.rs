@@ -118,8 +118,12 @@ pub enum NativeAction {
     Previous,
 }
 
-/// Resolves a UI action against what the app supports. A toggle falls back to
-/// play/pause when the app doesn't implement toggling. `None` = unsupported.
+/// Resolves a UI action against what the app supports. `None` = unsupported.
+///
+/// A toggle is sent as an explicit Play or Pause whenever the app supports
+/// it: browsers (Chrome, Edge — e.g. YouTube) advertise toggling but ignore
+/// the toggle command, while every app honours Play/Pause. The native toggle
+/// is only the fallback for apps that offer nothing else.
 pub fn resolve_action(
     action: MediaAction,
     status: PlaybackStatus,
@@ -131,13 +135,14 @@ pub fn resolve_action(
         MediaAction::Next => controls.next.then_some(NativeAction::Next),
         MediaAction::Previous => controls.previous.then_some(NativeAction::Previous),
         MediaAction::TogglePlayPause => {
-            if controls.toggle_play_pause {
-                Some(NativeAction::TogglePlayPause)
-            } else if status == PlaybackStatus::Playing {
+            let explicit = if status == PlaybackStatus::Playing {
                 controls.pause.then_some(NativeAction::Pause)
             } else {
                 controls.play.then_some(NativeAction::Play)
-            }
+            };
+            explicit.or(controls
+                .toggle_play_pause
+                .then_some(NativeAction::TogglePlayPause))
         }
     }
 }
@@ -313,6 +318,27 @@ mod tests {
         assert_eq!(
             resolve_action(MediaAction::Next, PlaybackStatus::Playing, &all),
             Some(NativeAction::Next)
+        );
+        // Explicit pause/play wins over the toggle (browsers ignore toggling).
+        assert_eq!(
+            resolve_action(MediaAction::TogglePlayPause, PlaybackStatus::Playing, &all),
+            Some(NativeAction::Pause)
+        );
+        assert_eq!(
+            resolve_action(MediaAction::TogglePlayPause, PlaybackStatus::Paused, &all),
+            Some(NativeAction::Play)
+        );
+        let toggle_only = MediaControls {
+            toggle_play_pause: true,
+            ..MediaControls::default()
+        };
+        assert_eq!(
+            resolve_action(
+                MediaAction::TogglePlayPause,
+                PlaybackStatus::Playing,
+                &toggle_only
+            ),
+            Some(NativeAction::TogglePlayPause)
         );
         let none = MediaControls::default();
         for action in [

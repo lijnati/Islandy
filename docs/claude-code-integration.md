@@ -164,6 +164,15 @@ It never reads or forwards prompts, `tool_input`, `tool_response`, `message`,
 variables. A test feeds a payload containing an API key and checks that the output contains
 none of it. See [privacy.md](privacy.md).
 
+### Claude Desktop
+
+To show when Claude Desktop (the chat app) is writing a reply, Islandy uses Windows UI
+Automation. While a Claude Desktop window exists it polls about every 1.2 s, and it reads only
+whether a button named "Stop response" or "Stop generating" is present. No chat content, window
+text or titles are read, and nothing is stored beyond the normal activity events ("Claude
+Desktop · Working" and "Claude finished responding"). It is turned off with the Claude Code
+source toggle in Settings › Notifications. Claude Code in the Code tab uses the hooks described in this document.
+
 ## Developer events (`islandy notify`)
 
 ```powershell

@@ -38,16 +38,16 @@ uses almost nothing when idle.
 
 ## Features
 
-|                          |                                                                                                                                                                      |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Now Playing**          | Any app that publishes a Windows media session (Spotify, browsers, Media Player…): artwork, controls, seeking, session switching.                                    |
-| **Weather**              | Current conditions, feels-like, humidity, wind and a 3-day outlook for a place you choose. Powered by Open-Meteo, with no account.                                   |
-| **Calendar**             | Locale-aware month view with navigation.                                                                                                                             |
-| **System**               | Volume and output, battery and power, network, Wi-Fi and Bluetooth radios, display brightness, CPU and memory, plus peeks for meaningful changes.                    |
-| **Developer activity**   | Claude Code sessions (working, needs attention, finished, error) via opt-in hooks, and `islandy notify build failed` for any script or CI step.                      |
-| **Make it yours**        | Midnight, Graphite and Frost themes, six accents, opacity, corners, motion; any monitor, left/center/right, offset, three sizes; reorder widgets; your own shortcut. |
-| **Automatic updates**    | Signed releases install themselves while you're away, or with one click. You can turn it off.                                                                        |
-| **Respectful by design** | Quiet mode, per-source peek controls and rate limits, launch at startup (opt-in), auto-hide during fullscreen apps.                                                  |
+|                          |                                                                                                                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Now Playing**          | Any app that publishes a Windows media session (Spotify, browsers, Media Player…): artwork, controls, seeking, session switching.                                                   |
+| **Weather**              | Current conditions, feels-like, humidity, wind and a 3-day outlook for a place you choose. Powered by Open-Meteo, with no account.                                                  |
+| **Calendar**             | Locale-aware month view with navigation.                                                                                                                                            |
+| **System**               | Volume and output, battery and power, network, Wi-Fi and Bluetooth radios, display brightness, CPU and memory, plus peeks for meaningful changes.                                   |
+| **Developer activity**   | Claude Code sessions (working, needs attention, finished, error) via opt-in hooks, Claude Desktop replies in progress, and `islandy notify build failed` for any script or CI step. |
+| **Make it yours**        | Midnight, Graphite and Frost themes, six accents, opacity, corners, motion; any monitor, left/center/right, offset, three sizes; reorder widgets; your own shortcut.                |
+| **Automatic updates**    | Signed releases install themselves while you're away, or with one click. You can turn it off.                                                                                       |
+| **Respectful by design** | Quiet mode, per-source peek controls and rate limits, launch at startup (opt-in), auto-hide during fullscreen apps.                                                                 |
 
 <table>
   <tr>

@@ -20,6 +20,15 @@ This page lists what it reads, keeps and sends.
 | Claude Code (Phase 4, opt-in) | Hook event name, a hash of the session id, the _last folder name_ of the working directory, a tool category, a reduced notification type and error type | Session state in memory; history events (kind, title written by Islandy, folder name, opaque session key, time) in `activity.json` |
 | Developer events              | What you pass to `islandy notify` (event, project, label, message title)                                                                                | History events in `activity.json`                                                                                                  |
 
+### Claude Desktop
+
+To show when Claude Desktop (the chat app) is writing a reply, Islandy uses Windows UI
+Automation. While a Claude Desktop window exists it polls about every 1.2 s, and it reads only
+whether a button named "Stop response" or "Stop generating" is present. No chat content, window
+text or titles are read, and nothing is stored beyond the normal activity events ("Claude
+Desktop · Working" and "Claude finished responding"). It is turned off with the Claude Code
+source toggle in Settings › Notifications. Claude Code in the Code tab uses the hooks above.
+
 ## Local files
 
 All in your per-user data directory: `%LOCALAPPDATA%\com.islandy.desktop` on Windows,

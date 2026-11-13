@@ -4,6 +4,27 @@ All notable changes to Islandy. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] — 2026-11-13
+
+### Added
+
+- Claude Desktop activity: while Claude Desktop (the chat app) writes a reply, the island shows
+  "Claude Desktop · Working", and a "Claude finished responding" peek appears when it's done.
+  Windows only. Detection uses Windows UI Automation and checks only whether Claude's "Stop
+  response" button is on screen; no chat content is read. Claude Code in Claude Desktop's Code
+  tab uses the existing hooks (install them in Settings › Integrations, then start a new
+  session).
+
+### Changed
+
+- The island shows the official Claude mark in Claude's brand colour, turning and breathing
+  while Claude works (still respecting reduced motion).
+
+### Fixed
+
+- The play/pause button didn't pause YouTube and other browser media (Chrome and Edge ignore
+  the "toggle" command); Islandy now sends explicit Play and Pause.
+
 ## [0.2.0] — 2026-11-13
 
 ### Added

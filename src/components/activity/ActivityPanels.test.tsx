@@ -47,7 +47,7 @@ describe("collapsed pill", () => {
   it("shows one working session as project · Working", () => {
     load(snapshot({ sessions: [session()] }));
     render(<CollapsedIsland />);
-    const pill = screen.getByRole("button", { name: /Claude Code, Islandy: Working/ });
+    const pill = screen.getByRole("button", { name: /Claude, Islandy: Working/ });
     expect(pill.textContent).toContain("Islandy · Working");
   });
 

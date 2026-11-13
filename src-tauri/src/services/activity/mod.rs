@@ -19,10 +19,13 @@
 //! - [`receiver`]        loopback listener (auth, limits)
 //! - [`store`]           bounded persistence
 //! - [`claude_settings`] opt-in hook installation in `~/.claude/settings.json`
+//! - [`claude_desktop`]  Claude Desktop (chat) reply detection on Windows
 //!
 //! Everything is event-driven: the worker sleeps until the next message or
-//! the engine's next deadline. Nothing polls Claude Code.
+//! the engine's next deadline. Nothing polls Claude Code. Claude Desktop has
+//! no hooks, so its watcher probes the Claude window (see that module).
 
+pub mod claude_desktop;
 pub mod claude_settings;
 pub mod engine;
 pub mod model;
@@ -32,7 +35,10 @@ pub mod store;
 
 use std::{
     path::PathBuf,
-    sync::{mpsc, Arc, Mutex, MutexGuard},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex, MutexGuard,
+    },
     thread::JoinHandle,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -109,6 +115,9 @@ pub struct ActivityService {
     hub: Arc<SharedHub>,
     worker: Mutex<Option<JoinHandle<()>>>,
     receiver: Mutex<Option<Receiver>>,
+    /// The Claude source is on (the Claude Desktop watcher idles otherwise).
+    claude_on: Arc<AtomicBool>,
+    stopping: Arc<AtomicBool>,
 }
 
 impl ActivityService {
@@ -131,6 +140,7 @@ impl ActivityService {
                 "activity history was unreadable; started a new one"
             );
         }
+        let claude_on = Arc::new(AtomicBool::new(engine.settings().sources.claude_code));
         let initial = engine.snapshot(1, ReceiverStatus::Starting, dir.is_none());
         let hub = Arc::new(SharedHub(Mutex::new(Hub {
             sink: None,
@@ -149,9 +159,12 @@ impl ActivityService {
             hub,
             worker: Mutex::new(Some(worker)),
             receiver: Mutex::new(None),
+            claude_on,
+            stopping: Arc::new(AtomicBool::new(false)),
         };
         if listen {
             service.start_receiver(dir);
+            service.start_claude_desktop_watch();
         }
         Ok(service)
     }
@@ -181,6 +194,44 @@ impl ActivityService {
         let _ = self.tx.send(Message::Receiver(status));
     }
 
+    /// Watches Claude Desktop (Windows only; elsewhere nothing starts).
+    fn start_claude_desktop_watch(&self) {
+        if !cfg!(windows) {
+            return;
+        }
+        let tx = self.tx.clone();
+        let on = Arc::clone(&self.claude_on);
+        let stopping = Arc::clone(&self.stopping);
+        let spawned = std::thread::Builder::new()
+            .name("islandy-claude-desktop".into())
+            .spawn(move || {
+                let Some(mut prober) = claude_desktop::Prober::new() else {
+                    crate::log_warn!(
+                        "activity",
+                        "UI Automation unavailable; Claude Desktop isn't watched"
+                    );
+                    return;
+                };
+                let mut tracker = claude_desktop::Tracker::default();
+                while !stopping.load(Ordering::Relaxed) {
+                    let probe = if on.load(Ordering::Relaxed) {
+                        prober.probe()
+                    } else {
+                        claude_desktop::Probe::NotRunning
+                    };
+                    if let Some(wire) = tracker.update(probe, now_ms()) {
+                        if tx.send(Message::Input(Input::Claude(wire))).is_err() {
+                            return;
+                        }
+                    }
+                    std::thread::sleep(claude_desktop::POLL);
+                }
+            });
+        if let Err(e) = spawned {
+            crate::log_warn!("activity", "couldn't start the Claude Desktop watcher: {e}");
+        }
+    }
+
     /// Replaces the UI sink and returns the latest snapshot atomically.
     pub fn connect(&self, sink: impl Fn(ActivityUpdate) + Send + 'static) -> ActivitySnapshot {
         let mut hub = self.hub.lock();
@@ -194,6 +245,16 @@ impl ActivityService {
 
     /// Fire-and-forget: the result arrives as a snapshot.
     pub fn command(&self, command: ActivityCommand) {
+        match &command {
+            ActivityCommand::SetSource(ActivitySource::ClaudeCode, on) => {
+                self.claude_on.store(*on, Ordering::Relaxed);
+            }
+            ActivityCommand::SetSettings(s) => {
+                self.claude_on
+                    .store(s.sources.claude_code, Ordering::Relaxed);
+            }
+            _ => {}
+        }
         let _ = self.tx.send(Message::Command(command));
     }
 
@@ -214,6 +275,7 @@ impl ActivityService {
     /// Stops the receiver (removing its connection file) and the worker,
     /// which writes pending history first. Bounded.
     pub fn shutdown(&self) {
+        self.stopping.store(true, Ordering::Relaxed);
         if let Some(mut receiver) = self
             .receiver
             .lock()
