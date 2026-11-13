@@ -14,6 +14,14 @@ All notable changes to Islandy. The format follows
 - Clicking the Claude logo on the island opens the Claude status panel directly (sessions,
   permission requests and the usage glance); the rest of the pill still opens the dashboard.
 
+### Fixed
+
+- Automatic updates never worked: the repository was private, so GitHub refused Islandy's
+  anonymous download of `latest.json` and every check failed with "No published release was
+  found". Updates need the repository (and so its releases) to be public. The error now says
+  the update information couldn't be downloaded. A new "Update test" workflow installs an older
+  release on Windows and checks that it updates itself.
+
 ## [0.3.0] — 2026-11-13
 
 ### Added

@@ -142,7 +142,11 @@ fn describe(e: &tauri_plugin_updater::Error) -> String {
     use tauri_plugin_updater::Error as E;
     match e {
         E::Reqwest(_) | E::Network(_) => "Couldn't reach the update server.".into(),
-        E::ReleaseNotFound => "No published release was found.".into(),
+        // The update file couldn't be downloaded (e.g. a 404: no public
+        // release, or the releases aren't publicly readable).
+        E::ReleaseNotFound => {
+            "The update information couldn't be downloaded from GitHub Releases.".into()
+        }
         E::Minisign(_)
         | E::Base64(_)
         | E::SignatureUtf8(_)
@@ -414,7 +418,7 @@ mod tests {
     fn errors_are_described_without_details() {
         assert_eq!(
             describe(&tauri_plugin_updater::Error::ReleaseNotFound),
-            "No published release was found."
+            "The update information couldn't be downloaded from GitHub Releases."
         );
         assert_eq!(
             describe(&tauri_plugin_updater::Error::EmptyEndpoints),
