@@ -62,16 +62,31 @@ macro_rules! choice {
 
 choice!(
     /// Colour scheme of every Islandy surface.
-    Theme { Midnight, Graphite, Frost }
+    Theme {
+        Midnight,
+        Graphite,
+        Frost
+    }
 );
 choice!(
     /// A restrained set of accents (controls, selection, focus); status
     /// colours are not affected.
-    Accent { White, Blue, Violet, Green, Amber, Coral }
+    Accent {
+        White,
+        Blue,
+        Violet,
+        Green,
+        Amber,
+        Coral
+    }
 );
 choice!(
     /// Corner radius presets for the dashboard and its widgets.
-    Corners { Standard, Compact, Round }
+    Corners {
+        Standard,
+        Compact,
+        Round
+    }
 );
 choice!(
     /// `full`: springs with a little overshoot. `subtle`: shorter, no overshoot.
@@ -84,15 +99,26 @@ choice!(
 );
 choice!(
     /// Horizontal anchor of the island on its monitor.
-    Anchor { TopCenter, TopLeft, TopRight }
+    Anchor {
+        TopCenter,
+        TopLeft,
+        TopRight
+    }
 );
 choice!(
     /// Size presets of the collapsed pill (and, proportionally, peeks).
-    SizePreset { Standard, Compact, Comfortable }
+    SizePreset {
+        Standard,
+        Compact,
+        Comfortable
+    }
 );
 choice!(
     /// Temperature unit of the weather widget.
-    TemperatureUnit { Celsius, Fahrenheit }
+    TemperatureUnit {
+        Celsius,
+        Fahrenheit
+    }
 );
 
 /// Dashboard widgets, in the registry's canonical (default) order.
