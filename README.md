@@ -184,6 +184,9 @@ Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-No open-source license has been chosen yet; until one is added, all rights are reserved by the
-author. Islandy is an independent project inspired by the Dynamic Island idea. It is not
-affiliated with or endorsed by Apple Inc. or Microsoft.
+Islandy is released under the [MIT License](LICENSE).
+
+Islandy is an independent project inspired by the Dynamic Island idea. It is not affiliated
+with or endorsed by Apple Inc., Microsoft or Anthropic. Claude and the Claude logo are
+trademarks of Anthropic and are not covered by the MIT License; Islandy shows the logo only to
+indicate Claude's status.
