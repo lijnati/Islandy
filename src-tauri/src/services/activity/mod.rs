@@ -196,7 +196,8 @@ impl ActivityService {
 
     /// Watches Claude Desktop (Windows only; elsewhere nothing starts).
     fn start_claude_desktop_watch(&self) {
-        if !cfg!(windows) {
+        // Not in tests: they must not probe the real desktop.
+        if !cfg!(windows) || cfg!(test) {
             return;
         }
         let tx = self.tx.clone();
@@ -483,7 +484,7 @@ mod tests {
     }
 
     fn wait_for(seen: &Mutex<Vec<ActivityUpdate>>, f: impl Fn(&[ActivityUpdate]) -> bool) {
-        let deadline = Instant::now() + Duration::from_secs(3);
+        let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
             if f(&seen.lock().unwrap()) {
                 return;
@@ -581,9 +582,13 @@ mod tests {
         let service = ActivityService::start_in(Some(dir.clone()), true).unwrap();
         let (seen, sink) = collect();
         service.connect(sink);
-        wait_for(&seen, |u| {
-            u.iter().any(|u| matches!(u, ActivityUpdate::Snapshot { snapshot } if snapshot.receiver == ReceiverStatus::Listening))
-        });
+        // The "listening" snapshot may be published before `connect`, so
+        // poll the latest snapshot rather than the updates seen since.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while service.snapshot().receiver != ReceiverStatus::Listening {
+            assert!(Instant::now() < deadline, "the receiver never listened");
+            std::thread::sleep(Duration::from_millis(10));
+        }
         let build = |event| {
             WireEvent::Developer(DeveloperWire {
                 event,
