@@ -39,6 +39,10 @@ pub const INFO_FILE: &str = "receiver.json";
 pub const MAX_PROJECT: usize = 64;
 pub const MAX_LABEL: usize = 80;
 pub const MAX_TITLE: usize = 100;
+pub const MAX_SUMMARY: usize = 160;
+/// How long `islandy hook` waits for an answer to a permission request
+/// before handing it back to Claude Code's own prompt.
+pub const ANSWER_WAIT: Duration = Duration::from_secs(30);
 
 /* -------------------------------------------------------------------------- */
 /* Events                                                                     */
@@ -184,6 +188,51 @@ pub struct ClaudeWire {
     /// The hook fired inside a subagent (`agent_id` was present).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub subagent: bool,
+    /// `PermissionRequest` only: the bridge waits for an answer from the
+    /// island (see [`ask`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ask: Option<PermissionAsk>,
+}
+
+/// What a permission request asks for, shown on the island so it can be
+/// answered there. Held in memory only while the question is open; never
+/// written to history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PermissionAsk {
+    /// One line: the command, file path, URL or tool being requested.
+    pub summary: String,
+    /// `summary` shows the whole request. Otherwise Islandy offers no
+    /// Allow (only Deny, or answering in Claude Code).
+    pub complete: bool,
+}
+
+/// The island's answer to a permission request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Decision {
+    Allow,
+    Deny,
+    /// No answer: Claude Code shows its own prompt as usual.
+    Pass,
+}
+
+impl Decision {
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Allow => "allow",
+            Self::Deny => "deny",
+            Self::Pass => "pass",
+        }
+    }
+
+    pub fn from_word(word: &str) -> Self {
+        match word {
+            "allow" => Self::Allow,
+            "deny" => Self::Deny,
+            _ => Self::Pass,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -308,6 +357,12 @@ pub fn validate(event: &WireEvent) -> Result<(), &'static str> {
             }
             if e.error.is_some() && e.event != ClaudeHook::StopFailure {
                 return Err("error");
+            }
+            if let Some(ask) = &e.ask {
+                if e.event != ClaudeHook::PermissionRequest || !is_clean(&ask.summary, MAX_SUMMARY)
+                {
+                    return Err("ask");
+                }
             }
         }
         WireEvent::Developer(e) => {
@@ -470,6 +525,27 @@ pub const IO_TIMEOUT: Duration = Duration::from_millis(700);
 
 /// Sends one event to the running app. Bounded by the timeouts above.
 pub fn send(dir: &Path, event: &WireEvent) -> Result<(), SendError> {
+    deliver(dir, event).map(drop)
+}
+
+/// Sends a permission request (an event with `ask`) and waits up to
+/// `wait` for the island's answer. Anything unexpected — Islandy not
+/// running, an older Islandy that doesn't answer, a timeout — is `Pass`.
+pub fn ask(dir: &Path, event: &WireEvent, wait: Duration) -> Decision {
+    let Ok(mut stream) = deliver(dir, event) else {
+        return Decision::Pass;
+    };
+    if stream.set_read_timeout(Some(wait)).is_err() {
+        return Decision::Pass;
+    }
+    match read_line(&mut stream) {
+        Ok(line) => Decision::from_word(&line),
+        Err(()) => Decision::Pass,
+    }
+}
+
+/// Sends one message and checks the `ok`; returns the open connection.
+fn deliver(dir: &Path, event: &WireEvent) -> Result<TcpStream, SendError> {
     let info = read_info(dir).ok_or(SendError::NotRunning)?;
     let message = encode(&info.token, event).map_err(|_| SendError::Encode)?;
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, info.port));
@@ -482,29 +558,30 @@ pub fn send(dir: &Path, event: &WireEvent) -> Result<(), SendError> {
     stream
         .write_all(&message)
         .map_err(|_| SendError::Unreachable)?;
-    let mut reply = [0u8; 64];
-    let mut len = 0;
-    while len < reply.len() {
-        match stream.read(&mut reply[len..]) {
-            Ok(0) => break,
-            Ok(n) => {
-                len += n;
-                if reply[..len].contains(&b'\n') {
-                    break;
-                }
-            }
-            Err(_) => return Err(SendError::Unreachable),
-        }
-    }
-    let reply = String::from_utf8_lossy(&reply[..len]);
-    let reply = reply.trim();
+    let reply = read_line(&mut stream).map_err(|()| SendError::Unreachable)?;
     if reply == "ok" {
-        Ok(())
+        Ok(stream)
     } else {
         Err(SendError::Rejected(
             reply.strip_prefix("error ").unwrap_or("unknown").to_owned(),
         ))
     }
+}
+
+/// Reads one short reply line byte by byte (so nothing after the newline is
+/// consumed), trimmed. EOF before a newline returns what was read.
+fn read_line(stream: &mut TcpStream) -> Result<String, ()> {
+    let mut line = Vec::with_capacity(16);
+    let mut byte = [0u8; 1];
+    while line.len() < 64 {
+        match stream.read(&mut byte) {
+            Ok(0) => break,
+            Ok(_) if byte[0] == b'\n' => break,
+            Ok(_) => line.push(byte[0]),
+            Err(_) => return Err(()),
+        }
+    }
+    Ok(String::from_utf8_lossy(&line).trim().to_owned())
 }
 
 #[cfg(test)]
@@ -522,6 +599,7 @@ mod tests {
             notification: None,
             error: None,
             subagent: false,
+            ask: None,
         })
     }
 

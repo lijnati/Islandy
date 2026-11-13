@@ -34,6 +34,7 @@ pub mod receiver;
 pub mod store;
 
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -46,8 +47,8 @@ use std::{
 use self::{
     engine::{ActivityEngine, Input, Outcome},
     model::{ActivitySettings, ActivitySnapshot, ActivitySource, ActivityUpdate, ReceiverStatus},
-    protocol::{Rejection, WireEvent},
-    receiver::Receiver,
+    protocol::{ClaudeWire, Decision, Rejection, WireEvent},
+    receiver::{Receiver, Responder},
 };
 use crate::services::{paths, system::models::SystemAlert};
 
@@ -71,10 +72,18 @@ pub enum ActivityCommand {
     SetQuiet(bool),
     SetSource(ActivitySource, bool),
     SetSettings(ActivitySettings),
+    /// The user's answer to permission question `id` of a session.
+    Answer {
+        session: String,
+        id: u64,
+        decision: Decision,
+    },
 }
 
 enum Message {
     Input(Input),
+    /// A permission request whose bridge waits for the island's answer.
+    Ask(ClaudeWire, Responder),
     Command(ActivityCommand),
     Receiver(ReceiverStatus),
     Shutdown,
@@ -171,14 +180,14 @@ impl ActivityService {
 
     fn start_receiver(&self, dir: Option<PathBuf>) {
         let tx = self.tx.clone();
-        let sink: receiver::Sink = Box::new(move |event| {
-            let input = match event {
-                WireEvent::Claude(e) => Input::Claude(e),
-                WireEvent::Developer(e) => Input::Developer(e),
-                WireEvent::Ping => return Ok(()),
+        let sink: receiver::Sink = Box::new(move |event, responder| {
+            let message = match (event, responder) {
+                (WireEvent::Claude(e), Some(r)) => Message::Ask(e, r),
+                (WireEvent::Claude(e), None) => Message::Input(Input::Claude(e)),
+                (WireEvent::Developer(e), _) => Message::Input(Input::Developer(e)),
+                (WireEvent::Ping, _) => return Ok(()),
             };
-            tx.send(Message::Input(input))
-                .map_err(|_| Rejection::Unavailable)
+            tx.send(message).map_err(|_| Rejection::Unavailable)
         });
         let status = match dir.map(|d| Receiver::start(&d, sink)) {
             Some(Ok(receiver)) => {
@@ -323,6 +332,10 @@ struct Worker {
     history_error: bool,
     publish_at: Option<Instant>,
     persist_at: Option<Instant>,
+    /// Bridges waiting for an answer: session → (question id, connection).
+    /// Kept in step with the engine's open questions; a dropped responder
+    /// answers `pass`.
+    waiting: HashMap<String, (u64, Responder)>,
 }
 
 impl Worker {
@@ -336,6 +349,7 @@ impl Worker {
             receiver: ReceiverStatus::Starting,
             publish_at: None,
             persist_at: None,
+            waiting: HashMap::new(),
         }
     }
 
@@ -360,6 +374,32 @@ impl Worker {
                     let outcome = self.engine.ingest(input, now_ms());
                     self.apply(outcome, false);
                 }
+                Some(Message::Ask(e, responder)) => {
+                    #[cfg(debug_assertions)]
+                    log_input(&Input::Claude(e.clone()));
+                    let session = e.session.clone();
+                    let outcome = self.engine.ingest(Input::Claude(e), now_ms());
+                    if let Some(id) = self.engine.question(&session) {
+                        // Replaces (and so passes on) an older question.
+                        self.waiting.insert(session, (id, responder));
+                    }
+                    self.apply(outcome, true);
+                }
+                Some(Message::Command(ActivityCommand::Answer {
+                    session,
+                    id,
+                    decision,
+                })) => {
+                    let (outcome, open) = self.engine.answer(&session, id, decision);
+                    if open {
+                        if let Some((waiting_id, responder)) = self.waiting.remove(&session) {
+                            if waiting_id == id {
+                                responder.answer(decision);
+                            }
+                        }
+                    }
+                    self.apply(outcome, true);
+                }
                 Some(Message::Command(command)) => {
                     let outcome = match command {
                         ActivityCommand::Dismiss(id) => self.engine.dismiss(&id),
@@ -374,6 +414,7 @@ impl Worker {
                         ActivityCommand::SetSettings(settings) => {
                             self.engine.apply_settings(settings, now_ms())
                         }
+                        ActivityCommand::Answer { .. } => Outcome::default(),
                     };
                     // User actions are reflected immediately.
                     self.apply(outcome, true);
@@ -386,6 +427,11 @@ impl Worker {
                 None => {}
             }
             self.run_due();
+            // Questions that closed (answered in Claude Code, expired,
+            // superseded, setting off) release their bridge.
+            let engine = &self.engine;
+            self.waiting
+                .retain(|session, (id, _)| engine.question(session) == Some(*id));
         }
         self.persist();
     }
@@ -503,6 +549,7 @@ mod tests {
             notification: None,
             error: None,
             subagent: false,
+            ask: None,
         })
     }
 
@@ -567,6 +614,7 @@ mod tests {
                 notification: None,
                 error: None,
                 subagent: false,
+                ask: None,
             }));
         }
         std::thread::sleep(PUBLISH_DELAY * 3);
@@ -611,6 +659,58 @@ mod tests {
             protocol::send(&dir, &build(DeveloperEvent::BuildStarted)),
             Err(protocol::SendError::NotRunning)
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_permission_request_is_answered_from_the_island() {
+        let dir = temp_dir("answer");
+        let service = ActivityService::start_in(Some(dir.clone()), true).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while service.snapshot().receiver != ReceiverStatus::Listening {
+            assert!(Instant::now() < deadline, "the receiver never listened");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        service.command(ActivityCommand::SetSettings(ActivitySettings {
+            answer_permissions: true,
+            ..ActivitySettings::default()
+        }));
+        let ask = WireEvent::Claude(ClaudeWire {
+            event: ClaudeHook::PermissionRequest,
+            session: session_key("s"),
+            project: Some("Islandy".into()),
+            tool: None,
+            notification: None,
+            error: None,
+            subagent: false,
+            ask: Some(protocol::PermissionAsk {
+                summary: "cargo test".into(),
+                complete: true,
+            }),
+        });
+        let bridge = {
+            let dir = dir.clone();
+            std::thread::spawn(move || protocol::ask(&dir, &ask, Duration::from_secs(10)))
+        };
+        let question = loop {
+            let snapshot = service.snapshot();
+            if let Some(q) = snapshot.sessions.first().and_then(|s| s.question.clone()) {
+                break q;
+            }
+            assert!(
+                Instant::now() < deadline + Duration::from_secs(5),
+                "no question"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(question.summary, "cargo test");
+        service.command(ActivityCommand::Answer {
+            session: session_key("s"),
+            id: question.id,
+            decision: Decision::Deny,
+        });
+        assert_eq!(bridge.join().unwrap(), Decision::Deny);
+        service.shutdown();
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

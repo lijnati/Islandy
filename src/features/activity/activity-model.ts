@@ -26,6 +26,7 @@ export const EMPTY_ACTIVITY: ActivitySnapshot = {
   receiver: "starting",
   historyError: false,
   lastReceived: { claudeCode: null, developer: null },
+  usage: { turns: 0, workedMs: 0, neededYou: 0, partial: true },
 };
 
 /* ------------------------------------------------------------------------ */

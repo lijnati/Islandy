@@ -31,7 +31,11 @@ export const WIDGET_IDS: readonly DashboardWidgetId[] = [
   "weather",
 ];
 
-export const SETTINGS_PAGES: readonly { id: SettingsPageId; label: string }[] = [
+/** Pages listed in the sidebar (`welcome` is reached by link, not listed). */
+export const SETTINGS_PAGES: readonly {
+  id: Exclude<SettingsPageId, "welcome">;
+  label: string;
+}[] = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
   { id: "island", label: "Island" },
@@ -43,7 +47,7 @@ export const SETTINGS_PAGES: readonly { id: SettingsPageId; label: string }[] = 
 ];
 
 export function isSettingsPage(value: string): value is SettingsPageId {
-  return SETTINGS_PAGES.some((p) => p.id === value);
+  return value === "welcome" || SETTINGS_PAGES.some((p) => p.id === value);
 }
 
 const clamp = (value: number, { min, max }: { min: number; max: number }, fallback: number) =>
@@ -119,7 +123,7 @@ export function normalizeSettings(s: Settings): Settings {
   if (!interaction.openOnHover && !interaction.openOnClick) interaction.openOnClick = true;
   const monitor = s.island.monitor;
   return {
-    version: 1,
+    version: 2,
     general: {
       ...s.general,
       toggleShortcut: shortcut && shortcut.length <= 64 ? shortcut : DEFAULT_SHORTCUT,
@@ -138,6 +142,7 @@ export function normalizeSettings(s: Settings): Settings {
     widgets: { items: normalizeWidgets(s.widgets.items) },
     weather: { ...s.weather, location: normalizeLocation(s.weather.location) },
     updates: { ...s.updates },
+    onboarding: { welcomed: s.onboarding.welcomed },
   };
 }
 

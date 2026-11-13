@@ -4,10 +4,15 @@
 //! - `islandy hook`: the Claude Code hook bridge. Reads the hook's JSON from
 //!   stdin, keeps a few allow-listed fields, forwards a reduced event to the
 //!   running app and exits 0 — always, silently, within about a second.
+//!   The one exception is a permission request: it also sends a one-line
+//!   summary of what is asked and waits (at most `ANSWER_WAIT`) for an
+//!   answer from the island, printed as the hook's decision. No answer
+//!   prints nothing, and Claude Code asks as usual.
 //! - `islandy notify …`: developer workflow events from scripts.
 //! - `islandy status`: checks whether the running app can be reached.
 //!
-//! None of them can make Islandy do anything but record an activity event.
+//! None of them can make Islandy do anything but record an activity event
+//! (and, for a permission request, ask the user on the island).
 
 use std::{
     ffi::OsString,
@@ -23,9 +28,9 @@ use crate::services::{
     activity::{
         model::{Severity, ToolCategory},
         protocol::{
-            self, clean_text, project_from_cwd, session_key, ClaudeHook, ClaudeWire,
-            DeveloperEvent, DeveloperWire, NotificationKind, SendError, StopError, WireEvent,
-            MAX_LABEL, MAX_PROJECT, MAX_TITLE,
+            self, clean_text, project_from_cwd, session_key, ClaudeHook, ClaudeWire, Decision,
+            DeveloperEvent, DeveloperWire, NotificationKind, PermissionAsk, SendError, StopError,
+            WireEvent, ANSWER_WAIT, MAX_LABEL, MAX_PROJECT, MAX_SUMMARY, MAX_TITLE,
         },
     },
     paths,
@@ -84,9 +89,10 @@ fn uninstall_cleanup() -> i32 {
 /* -------------------------------------------------------------------------- */
 
 /// The only fields read from a hook payload. Values are kept as loose JSON
-/// so an unexpected type can't make the bridge fail; `tool_input`,
-/// `tool_response`, `prompt`, `message`, `last_assistant_message`,
-/// `transcript_path` and everything else are skipped by the parser.
+/// so an unexpected type can't make the bridge fail; `tool_response`,
+/// `prompt`, `message`, `last_assistant_message`, `transcript_path` and
+/// everything else are skipped by the parser. `tool_input` is read only for
+/// a permission request, to summarize what is asked.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct HookInput {
@@ -94,6 +100,7 @@ struct HookInput {
     session_id: Option<Value>,
     cwd: Option<Value>,
     tool_name: Option<Value>,
+    tool_input: Option<Value>,
     notification_type: Option<Value>,
     error: Option<Value>,
     agent_id: Option<Value>,
@@ -156,7 +163,62 @@ pub fn reduce_hook(raw: &[u8]) -> Option<WireEvent> {
         error: (event == ClaudeHook::StopFailure)
             .then(|| StopError::from_hook(str_field(&input.error).unwrap_or(""))),
         subagent: input.agent_id.is_some(),
+        ask: (event == ClaudeHook::PermissionRequest)
+            .then(|| permission_ask(str_field(&input.tool_name)?, input.tool_input.as_ref()))
+            .flatten(),
     }))
+}
+
+/// One line describing a permission request: the command, the file, the URL
+/// or query, or the tool. `complete` only when that line is the *whole*
+/// request (nothing cut, no hidden lines, no other inputs that matter), so
+/// the user never allows something they couldn't see.
+pub fn permission_ask(tool: &str, input: Option<&Value>) -> Option<PermissionAsk> {
+    let field = |name: &str| input.and_then(|i| i.get(name)).and_then(Value::as_str);
+    let (text, whole) = match tool {
+        "Bash" | "PowerShell" => (field("command")?.to_owned(), true),
+        "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => (
+            field("file_path")
+                .or_else(|| field("notebook_path"))?
+                .to_owned(),
+            true,
+        ),
+        "WebFetch" => (field("url")?.to_owned(), true),
+        "WebSearch" => (field("query")?.to_owned(), true),
+        // An MCP tool's arguments aren't shown: name only, Deny only.
+        name if name.starts_with("mcp__") => {
+            let mut parts = name.trim_start_matches("mcp__").splitn(2, "__");
+            let server = parts.next().unwrap_or("");
+            let tool = parts.next().unwrap_or("");
+            (format!("{server} › {tool}"), false)
+        }
+        other => (other.to_owned(), false),
+    };
+    let summary = clean_text(&text, MAX_SUMMARY)?;
+    // Cut, or whitespace (e.g. newlines) changed: not the whole request.
+    let complete = whole && summary == text;
+    Some(PermissionAsk { summary, complete })
+}
+
+/// The hook's stdout for a decision (`None`: print nothing).
+pub fn decision_output(decision: Decision) -> Option<String> {
+    let decision = match decision {
+        Decision::Allow => serde_json::json!({ "behavior": "allow" }),
+        Decision::Deny => serde_json::json!({
+            "behavior": "deny",
+            "message": "Denied from Islandy.",
+        }),
+        Decision::Pass => return None,
+    };
+    Some(
+        serde_json::json!({
+            "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": decision,
+            }
+        })
+        .to_string(),
+    )
 }
 
 /// Reads at most `limit` bytes, then drains (and discards) the rest so the
@@ -183,13 +245,20 @@ fn read_bounded(mut reader: impl Read, limit: usize) -> Option<Vec<u8>> {
     (!overflow).then_some(buffer)
 }
 
-/// Observational only: always exits 0 and prints nothing, so it can never
-/// block, alter or clutter a Claude Code session.
+/// Always exits 0. Prints nothing, except the user's answer to a
+/// permission request given on the island.
 fn hook() -> i32 {
     let Some(raw) = read_bounded(std::io::stdin().lock(), MAX_HOOK_INPUT) else {
         return 0;
     };
-    if let (Some(event), Some(dir)) = (reduce_hook(&raw), paths::data_dir()) {
+    let (Some(event), Some(dir)) = (reduce_hook(&raw), paths::data_dir()) else {
+        return 0;
+    };
+    if matches!(&event, WireEvent::Claude(e) if e.ask.is_some()) {
+        if let Some(out) = decision_output(protocol::ask(&dir, &event, ANSWER_WAIT)) {
+            println!("{out}");
+        }
+    } else {
         let _ = protocol::send(&dir, &event);
     }
     0
@@ -512,5 +581,62 @@ mod tests {
         assert_eq!(main(&os(&["islandy"])), None);
         assert_eq!(main(&os(&["islandy", "--some-flag"])), None);
         assert_eq!(main(&os(&["islandy", "notify", "bogus"])), Some(2));
+    }
+
+    #[test]
+    fn permission_requests_carry_a_summary_only_they_need() {
+        let e = claude(json!({
+            "hook_event_name": "PermissionRequest", "session_id": "s", "cwd": "/w/islandy",
+            "tool_name": "Bash", "tool_input": { "command": "cargo test", "description": "x" }
+        }));
+        assert_eq!(
+            e.ask,
+            Some(PermissionAsk {
+                summary: "cargo test".into(),
+                complete: true
+            })
+        );
+        // Other events never carry tool input.
+        let e = claude(json!({
+            "hook_event_name": "PreToolUse", "session_id": "s",
+            "tool_name": "Bash", "tool_input": { "command": "cargo test" }
+        }));
+        assert_eq!(e.ask, None);
+    }
+
+    #[test]
+    fn summaries_are_complete_only_when_nothing_is_hidden() {
+        let ask = |tool: &str, input: Value| permission_ask(tool, Some(&input)).unwrap();
+        assert!(ask("Edit", json!({ "file_path": "C:/src/main.rs" })).complete);
+        assert!(ask("WebFetch", json!({ "url": "https://example.com/a" })).complete);
+        // Several lines, or too long to show: Deny only.
+        let multi = ask("Bash", json!({ "command": "echo a\nrm -rf /" }));
+        assert!(!multi.complete);
+        assert_eq!(multi.summary, "echo a rm -rf /");
+        let long = ask("Bash", json!({ "command": "x".repeat(500) }));
+        assert!(!long.complete && long.summary.chars().count() == MAX_SUMMARY);
+        // MCP and unknown tools: name only, never complete.
+        let mcp = ask("mcp__github__create_issue", json!({ "title": "t" }));
+        assert_eq!(mcp.summary, "github › create_issue");
+        assert!(!mcp.complete);
+        assert!(!ask("SomethingNew", json!({})).complete);
+        // Missing input for a known tool: no question.
+        assert!(permission_ask("Bash", None).is_none());
+    }
+
+    #[test]
+    fn decisions_print_claude_codes_permission_output() {
+        assert_eq!(decision_output(Decision::Pass), None);
+        let allow: Value =
+            serde_json::from_str(&decision_output(Decision::Allow).unwrap()).unwrap();
+        assert_eq!(
+            allow,
+            json!({ "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": { "behavior": "allow" }
+            }})
+        );
+        let deny: Value = serde_json::from_str(&decision_output(Decision::Deny).unwrap()).unwrap();
+        assert_eq!(deny["hookSpecificOutput"]["decision"]["behavior"], "deny");
     }
 }

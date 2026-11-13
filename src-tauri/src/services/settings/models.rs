@@ -15,7 +15,7 @@ use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 
 /// Current file format. Bump it and add a step to `storage::MIGRATIONS`
 /// when a change can't be expressed with defaults alone.
-pub const SETTINGS_VERSION: u32 = 1;
+pub const SETTINGS_VERSION: u32 = 2;
 
 /// Deserializes a settings section field by field on top of its defaults:
 /// each stored value that is valid is kept, each invalid one (wrong type,
@@ -366,6 +366,17 @@ impl Default for UpdateSettings {
     }
 }
 
+/// First-run state. A fresh install starts with `welcomed: false` and shows
+/// the welcome page once; every file written before this section existed
+/// (version 1) is migrated to `true` so upgrades never see it
+/// (`storage::MIGRATIONS`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OnboardingSettings {
+    /// The welcome page was finished or skipped.
+    pub welcomed: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -384,6 +395,8 @@ pub struct Settings {
     pub weather: WeatherSettings,
     #[serde(deserialize_with = "section")]
     pub updates: UpdateSettings,
+    #[serde(deserialize_with = "section")]
+    pub onboarding: OnboardingSettings,
 }
 
 impl Default for Settings {
@@ -397,6 +410,7 @@ impl Default for Settings {
             widgets: WidgetSettings::default(),
             weather: WeatherSettings::default(),
             updates: UpdateSettings::default(),
+            onboarding: OnboardingSettings::default(),
         }
     }
 }
@@ -496,7 +510,8 @@ mod tests {
     #[test]
     fn serializes_with_camel_case_keys() {
         let v = serde_json::to_value(Settings::default()).unwrap();
-        assert_eq!(v["version"], 1);
+        assert_eq!(v["version"], 2);
+        assert_eq!(v["onboarding"]["welcomed"], false);
         assert_eq!(v["general"]["toggleShortcut"], "Ctrl+Alt+Space");
         assert_eq!(v["island"]["anchor"], "topCenter");
         assert_eq!(v["island"]["offsetX"], 0);
@@ -511,7 +526,7 @@ mod tests {
     #[test]
     fn invalid_fields_fall_back_individually() {
         let v = json!({
-            "version": 1,
+            "version": 2,
             "appearance": { "theme": "neon", "opacity": "lots", "accent": "blue" },
             "island": { "anchor": "topLeft", "topMargin": -4, "offsetX": 1e12 },
             "interaction": { "hoverDelayMs": 5000, "openOnHover": "yes" },
@@ -535,6 +550,18 @@ mod tests {
             GeneralSettings::default(),
             "wrong section type → default"
         );
+    }
+
+    #[test]
+    fn a_fresh_install_is_not_welcomed_yet() {
+        assert!(!Settings::default().onboarding.welcomed);
+        // A section that isn't an object, or a wrong type, is "not welcomed".
+        let s: Settings =
+            serde_json::from_value(json!({"onboarding": {"welcomed": "yes"}})).unwrap();
+        assert!(!s.onboarding.welcomed);
+        let s: Settings =
+            serde_json::from_value(json!({"onboarding": {"welcomed": true}})).unwrap();
+        assert!(s.onboarding.welcomed);
     }
 
     #[test]

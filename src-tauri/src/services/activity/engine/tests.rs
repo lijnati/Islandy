@@ -19,6 +19,7 @@ fn claude(session: &str, event: H) -> ClaudeWire {
         notification: None,
         error: None,
         subagent: false,
+        ask: None,
     }
 }
 
@@ -745,4 +746,136 @@ fn last_received_tracks_unrecorded_tool_events() {
     e.ingest(tool("s1", H::PreToolUse, ToolCategory::Reading), T0 + 5);
     assert_eq!(snap(&e).last_received.claude_code, Some(T0 + 5));
     assert_eq!(snap(&e).last_received.developer, None);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Permission questions and usage                                             */
+/* -------------------------------------------------------------------------- */
+
+fn answering() -> ActivityEngine {
+    ActivityEngine::new(
+        ActivitySettings {
+            answer_permissions: true,
+            ..ActivitySettings::default()
+        },
+        T0,
+    )
+}
+
+fn permission(session: &str, summary: &str, complete: bool) -> Input {
+    Input::Claude(ClaudeWire {
+        tool: Some(ToolCategory::Running),
+        ask: Some(crate::services::activity::protocol::PermissionAsk {
+            summary: summary.into(),
+            complete,
+        }),
+        ..claude(session, H::PermissionRequest)
+    })
+}
+
+#[test]
+fn questions_only_open_when_answering_is_on() {
+    let mut e = engine();
+    e.ingest(permission("s1", "cargo test", true), T0);
+    let snapshot = snap(&e);
+    let s = session(&snapshot, "s1");
+    assert_eq!(s.status, SessionStatus::Attention);
+    assert!(s.question.is_none());
+
+    let mut e = answering();
+    e.ingest(permission("s1", "cargo test", true), T0);
+    let q = session(&snap(&e), "s1").question.clone().expect("question");
+    assert_eq!(q.summary, "cargo test");
+    assert!(q.complete);
+    assert_eq!(q.tool, Some(ToolCategory::Running));
+    assert_eq!(e.question(&session_key("s1")), Some(q.id));
+}
+
+#[test]
+fn an_answer_closes_the_question_and_the_attention() {
+    let mut e = answering();
+    e.ingest(permission("s1", "cargo test", true), T0);
+    let id = e.question(&session_key("s1")).unwrap();
+    // A stale id is refused.
+    assert!(!e.answer(&session_key("s1"), id + 1, Decision::Allow).1);
+    let (outcome, open) = e.answer(&session_key("s1"), id, Decision::Allow);
+    assert!(open && outcome.changed);
+    let snapshot = snap(&e);
+    let s = session(&snapshot, "s1");
+    assert!(s.question.is_none());
+    assert!(s.attention_event.is_none());
+    assert_eq!(s.status, SessionStatus::Working);
+    // Only once.
+    assert!(!e.answer(&session_key("s1"), id, Decision::Deny).1);
+}
+
+#[test]
+fn passing_keeps_the_attention_for_claude_codes_own_prompt() {
+    let mut e = answering();
+    e.ingest(permission("s1", "rm -rf build", true), T0);
+    let id = e.question(&session_key("s1")).unwrap();
+    assert!(e.answer(&session_key("s1"), id, Decision::Pass).1);
+    let snapshot = snap(&e);
+    let s = session(&snapshot, "s1");
+    assert!(s.question.is_none());
+    assert_eq!(s.status, SessionStatus::Attention);
+}
+
+#[test]
+fn questions_close_when_answered_elsewhere_expire_or_are_switched_off() {
+    let mut e = answering();
+    e.ingest(permission("s1", "ls", true), T0);
+    e.ingest(c("s1", H::PostToolUse), T0 + SECOND);
+    assert_eq!(e.question(&session_key("s1")), None);
+
+    e.ingest(permission("s1", "ls", true), T0 + 2 * SECOND);
+    let deadline = e.next_deadline().unwrap();
+    assert!(deadline < T0 + 2 * SECOND + ANSWER_WAIT.as_millis() as u64);
+    e.tick(deadline);
+    assert_eq!(e.question(&session_key("s1")), None);
+
+    e.ingest(permission("s1", "ls", true), T0 + MINUTE);
+    e.apply_settings(ActivitySettings::default(), T0 + MINUTE);
+    assert_eq!(e.question(&session_key("s1")), None);
+}
+
+#[test]
+fn a_new_request_replaces_the_question() {
+    let mut e = answering();
+    e.ingest(permission("s1", "one", true), T0);
+    let first = e.question(&session_key("s1")).unwrap();
+    e.ingest(permission("s1", "two", true), T0 + SECOND);
+    let second = e.question(&session_key("s1")).unwrap();
+    assert_ne!(first, second);
+    assert_eq!(
+        session(&snap(&e), "s1").question.as_ref().unwrap().summary,
+        "two"
+    );
+}
+
+#[test]
+fn usage_counts_turns_work_time_and_requests() {
+    let mut e = engine();
+    e.ingest(c("s1", H::UserPromptSubmit), T0);
+    e.ingest(c("s1", H::Stop), T0 + 30 * SECOND);
+    e.ingest(c("s2", H::UserPromptSubmit), T0 + MINUTE);
+    e.ingest(permission("s2", "x", true), T0 + MINUTE + 5 * SECOND);
+    e.ingest(c("s2", H::PostToolUse), T0 + 2 * MINUTE);
+    let u = snap(&e).usage;
+    assert_eq!(u.turns, 2);
+    assert_eq!(u.needed_you, 1);
+    // 30 s finished + 60 s of s2's turn still running.
+    assert_eq!(u.worked_ms, 90 * SECOND);
+    assert!(u.partial);
+    let snapshot = snap(&e);
+    let s2 = session(&snapshot, "s2");
+    assert_eq!((s2.turns, s2.needed_you), (1, 1));
+
+    // A day later the window is empty (apart from the still-running turn,
+    // clipped to the window).
+    let later = T0 + DAY + 3 * MINUTE;
+    let u = e.usage(later);
+    assert_eq!((u.turns, u.needed_you), (0, 0));
+    assert_eq!(u.worked_ms, DAY);
+    assert!(!u.partial);
 }

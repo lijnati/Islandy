@@ -255,3 +255,59 @@ describe("dashboard card", () => {
     expect(screen.getByText(/Build failed/)).toBeDefined();
   });
 });
+
+describe("permission requests on the island", () => {
+  const question = (complete: boolean) => ({
+    id: 7,
+    tool: "running" as const,
+    summary: "cargo test",
+    complete,
+    askedAt: T0,
+    expiresAt: Date.now() + 28_000,
+  });
+
+  it("answers a complete request with Allow once", () => {
+    load(
+      snapshot({
+        sessions: [
+          session({ status: "attention", attentionEvent: "a1", question: question(true) }),
+        ],
+      }),
+    );
+    const answer = vi.spyOn(activityStore.getState(), "answer").mockImplementation(() => {});
+    render(<ClaudePanel />);
+    expect(screen.getByText("Claude wants to run")).toBeTruthy();
+    expect(screen.getByText("cargo test")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    expect(answer).toHaveBeenCalledWith("c0000000000000001", 7, "allow");
+    fireEvent.click(screen.getByRole("button", { name: "Answer in Claude Code" }));
+    expect(answer).toHaveBeenLastCalledWith("c0000000000000001", 7, "pass");
+  });
+
+  it("offers only Deny when part of the request isn't shown", () => {
+    load(
+      snapshot({
+        sessions: [
+          session({ status: "attention", attentionEvent: "a1", question: question(false) }),
+        ],
+      }),
+    );
+    render(<ClaudePanel />);
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
+  });
+
+  it("shows the usage glance", () => {
+    load(
+      snapshot({
+        sessions: [session({ turns: 3, neededYou: 1 })],
+        usage: { turns: 5, workedMs: 95 * 60_000, neededYou: 2, partial: false },
+      }),
+    );
+    render(<ClaudePanel />);
+    expect(screen.getByText(/3 turns this session · needed you once/)).toBeTruthy();
+    expect(
+      screen.getByText(/Last 24 hours: 5 turns · 1h 35m working · needed you 2×/),
+    ).toBeTruthy();
+  });
+});

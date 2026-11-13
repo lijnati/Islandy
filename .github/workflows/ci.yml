@@ -1,0 +1,80 @@
+name: CI
+
+# Runs the full check suite (the same steps as `pnpm check`) on Windows for every push to a
+# branch and for every pull request, then starts a debug build of the app as a smoke test.
+# Tag pushes are left to release.yml.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch / PR cancels the run that is still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Frontend tests
+        run: pnpm test
+
+      # `tauri::generate_context!` embeds the built frontend (`dist/`, which is not in git),
+      # so it has to exist before clippy and the Rust tests compile the crate.
+      - name: Build the frontend
+        run: pnpm build
+
+      - name: Rust lint
+        run: pnpm lint:rust
+
+      - name: Rust tests
+        run: pnpm test:rust
+
+      # Smoke test: build a debug app (no installer) and make sure it starts and keeps running.
+      - name: Build the app
+        run: pnpm tauri build --debug --no-bundle
+
+      - name: Launch the app
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "src-tauri/target/debug/islandy.exe"
+          if (-not (Test-Path $exe)) { throw "Built app not found: $exe" }
+          $proc = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 10
+          if ($proc.HasExited) {
+            throw "Islandy exited within 10 seconds (exit code $($proc.ExitCode))."
+          }
+          Write-Host "Islandy is still running after 10 seconds."
+          Stop-Process -Id $proc.Id -Force

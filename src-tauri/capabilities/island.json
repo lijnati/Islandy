@@ -26,6 +26,7 @@
     "allow-connect-activity",
     "allow-get-activity-snapshot",
     "allow-dismiss-activity",
+    "allow-answer-permission",
     "allow-clear-activity-history",
     "allow-set-quiet-mode",
     "allow-set-activity-source",

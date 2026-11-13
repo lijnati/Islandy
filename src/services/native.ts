@@ -8,6 +8,7 @@ import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 
 import type {
   ActivitySettings,
+  PermissionDecision,
   ActivitySnapshot,
   ActivitySource,
   ActivityUpdate,
@@ -265,6 +266,15 @@ export function dismissActivity(id: string): Promise<void> {
   return call<undefined>("dismiss_activity", { id });
 }
 
+/** Answers a Claude Code permission request shown on the island. */
+export function answerPermission(
+  session: string,
+  question: number,
+  decision: PermissionDecision,
+): Promise<void> {
+  return call<undefined>("answer_permission", { session, question, decision });
+}
+
 export function clearActivityHistory(): Promise<void> {
   return call<undefined>("clear_activity_history");
 }
@@ -392,6 +402,11 @@ export function getWeather(force = false): Promise<WeatherSnapshot> {
 
 export function searchWeatherPlaces(query: string): Promise<PlaceResult[]> {
   return call<PlaceResult[]>("search_weather_places", { query });
+}
+
+/** One read of the device location (asks Windows; call only on a click). */
+export function weatherLocate(): Promise<PlaceResult> {
+  return call<PlaceResult>("weather_locate");
 }
 
 export function getUpdateStatus(): Promise<UpdateStatus> {

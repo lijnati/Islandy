@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-weather-locate"
+description = "Enables the weather_locate command without any pre-configured scope."
+commands.allow = ["weather_locate"]
+
+[[permission]]
+identifier = "deny-weather-locate"
+description = "Denies the weather_locate command without any pre-configured scope."
+commands.deny = ["weather_locate"]

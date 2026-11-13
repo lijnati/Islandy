@@ -1,11 +1,11 @@
-import { MapPin, Search } from "lucide-react";
+import { LocateFixed, MapPin, Search } from "lucide-react";
 import { useId, useState } from "react";
 
 import { focusRing } from "../../../components/ui/IconButton";
 import { cx } from "../../../components/ui/cx";
 import type { PlaceResult, TemperatureUnit } from "../../../services/types";
 import { normalizeLocation } from "../settings-schema";
-import { isNativeAvailable, searchWeatherPlaces } from "../settings-service";
+import { isNativeAvailable, searchWeatherPlaces, weatherLocate } from "../settings-service";
 import { useSettings, useSettingsStore } from "../settings-store";
 import { Button, Row, Section, Segmented, StatusText } from "./controls";
 
@@ -14,6 +14,11 @@ type SearchState =
   | { kind: "searching" }
   | { kind: "results"; places: PlaceResult[] }
   | { kind: "error"; message: string };
+
+type LocateState = { kind: "idle" } | { kind: "locating" } | { kind: "error"; message: string };
+
+const errorText = (cause: unknown) =>
+  cause instanceof Error ? cause.message.replace(/^[a-z_]+: /, "") : String(cause);
 
 const UNITS = [
   { value: "celsius", label: "°C" },
@@ -27,6 +32,7 @@ export function WeatherSettings() {
   const update = useSettingsStore((s) => s.update);
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState<SearchState>({ kind: "idle" });
+  const [locate, setLocate] = useState<LocateState>({ kind: "idle" });
   const inputId = useId();
   const native = isNativeAvailable();
 
@@ -45,7 +51,23 @@ export function WeatherSettings() {
           },
     }));
     setSearch({ kind: "idle" });
+    setLocate({ kind: "idle" });
     setQuery("");
+  };
+
+  // The click is the permission: Windows is asked now, once, and never again
+  // unless the button is clicked again.
+  const useMyLocation = () => {
+    setLocate({ kind: "locating" });
+    setSearch({ kind: "idle" });
+    weatherLocate().then(
+      (place) => {
+        choose(place);
+      },
+      (cause: unknown) => {
+        setLocate({ kind: "error", message: errorText(cause) });
+      },
+    );
   };
 
   const runSearch = () => {
@@ -57,10 +79,7 @@ export function WeatherSettings() {
         setSearch({ kind: "results", places });
       },
       (cause: unknown) => {
-        setSearch({
-          kind: "error",
-          message: cause instanceof Error ? cause.message.replace(/^[a-z_]+: /, "") : String(cause),
-        });
+        setSearch({ kind: "error", message: errorText(cause) });
       },
     );
   };
@@ -146,6 +165,22 @@ export function WeatherSettings() {
                 Search
               </Button>
             </form>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Button
+                busy={locate.kind === "locating"}
+                disabled={!native}
+                onClick={useMyLocation}
+                title="Ask Windows for your location, once"
+              >
+                <LocateFixed size={14} strokeWidth={2} aria-hidden="true" />
+                Use my location
+              </Button>
+              <span className="min-w-0 flex-1 text-caption text-fg-subtle">
+                Read once, only when you click, and rounded to about 1 km. It stays on this device
+                and is sent only to Open-Meteo as the forecast coordinates. It isn't updated later.
+              </span>
+            </div>
+            {locate.kind === "error" && <StatusText tone="error">{locate.message}</StatusText>}
             {search.kind === "error" && <StatusText tone="error">{search.message}</StatusText>}
             {search.kind === "results" &&
               (search.places.length === 0 ? (

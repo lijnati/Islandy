@@ -26,11 +26,12 @@ use std::collections::{HashMap, VecDeque};
 use super::{
     model::{
         ActivityEvent, ActivitySettings, ActivitySnapshot, ActivitySource, ClaudeSession,
-        EventKind, LastReceived, Lifecycle, PeekRequest, Priority, ReceiverStatus, SessionStatus,
-        Severity,
+        ClaudeUsage, EventKind, LastReceived, Lifecycle, PeekRequest, PermissionQuestion, Priority,
+        ReceiverStatus, SessionStatus, Severity,
     },
     protocol::{
-        ClaudeHook, ClaudeWire, DeveloperEvent, DeveloperWire, NotificationKind, StopError,
+        ClaudeHook, ClaudeWire, Decision, DeveloperEvent, DeveloperWire, NotificationKind,
+        StopError, ANSWER_WAIT,
     },
 };
 use crate::services::system::models::{ConnectionKind, SystemAlert};
@@ -172,7 +173,19 @@ pub struct ActivityEngine {
     peek_log: HashMap<ActivitySource, VecDeque<u64>>,
     last_received: LastReceived,
     next_id: u64,
+    next_question: u64,
+    /// Usage window: turn starts, finished turns (start, end) and times
+    /// Claude needed the user, oldest first, within the last day.
+    turn_starts: VecDeque<u64>,
+    turn_spans: VecDeque<(u64, u64)>,
+    needed_you: VecDeque<u64>,
+    started_at: u64,
+    /// The latest time the engine was given (snapshots are as of then).
+    clock: u64,
 }
+
+/// Bounds each usage log.
+const USAGE_CAPACITY: usize = 2000;
 
 impl ActivityEngine {
     pub fn new(settings: ActivitySettings, now: u64) -> Self {
@@ -185,6 +198,12 @@ impl ActivityEngine {
             peek_log: HashMap::new(),
             last_received: LastReceived::default(),
             next_id: now << 10,
+            next_question: 1,
+            turn_starts: VecDeque::new(),
+            turn_spans: VecDeque::new(),
+            needed_you: VecDeque::new(),
+            started_at: now,
+            clock: now,
         }
     }
 
@@ -241,10 +260,96 @@ impl ActivityEngine {
             receiver,
             history_error,
             last_received: self.last_received,
+            usage: self.usage(self.clock),
         }
     }
 
+    /// Usage over the last day, as of `now`.
+    pub fn usage(&self, now: u64) -> ClaudeUsage {
+        let from = now.saturating_sub(DAY);
+        let finished: u64 = self
+            .turn_spans
+            .iter()
+            .filter(|(_, end)| *end > from)
+            .map(|&(start, end)| end - start.max(from))
+            .sum();
+        let running: u64 = self
+            .sessions
+            .iter()
+            .filter_map(|s| s.turn_started_at)
+            .map(|start| now.saturating_sub(start.max(from)))
+            .sum();
+        let count = |log: &VecDeque<u64>| {
+            u32::try_from(log.iter().filter(|&&t| t > from).count()).unwrap_or(u32::MAX)
+        };
+        ClaudeUsage {
+            turns: count(&self.turn_starts),
+            worked_ms: finished + running,
+            needed_you: count(&self.needed_you),
+            partial: self.started_at > from,
+        }
+    }
+
+    fn log_usage(log: &mut VecDeque<u64>, now: u64) {
+        log.push_back(now);
+        while log.len() > USAGE_CAPACITY || log.front().is_some_and(|&t| t + DAY < now) {
+            log.pop_front();
+        }
+    }
+
+    /// Ends session `i`'s running turn (for the usage window).
+    fn end_turn(&mut self, i: usize, now: u64) {
+        if let Some(start) = self.sessions[i].turn_started_at {
+            self.turn_spans.push_back((start, now.max(start)));
+            while self.turn_spans.len() > USAGE_CAPACITY
+                || self.turn_spans.front().is_some_and(|&(_, e)| e + DAY < now)
+            {
+                self.turn_spans.pop_front();
+            }
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Permission requests answered on the island                          */
+    /* ------------------------------------------------------------------ */
+
+    /// The open question of a session, if any (id).
+    pub fn question(&self, session: &str) -> Option<u64> {
+        self.sessions
+            .iter()
+            .find(|s| s.id == session)
+            .and_then(|s| s.question.as_ref())
+            .map(|q| q.id)
+    }
+
+    /// Records the user's answer to question `id` of `session`. Returns
+    /// whether it was still open (only then may it be sent to Claude Code).
+    pub fn answer(&mut self, session: &str, id: u64, decision: Decision) -> (Outcome, bool) {
+        let Some(i) = self
+            .sessions
+            .iter()
+            .position(|s| s.id == session && s.question.as_ref().is_some_and(|q| q.id == id))
+        else {
+            return (Outcome::default(), false);
+        };
+        self.sessions[i].question = None;
+        let mut outcome = Outcome {
+            changed: true,
+            ..Outcome::default()
+        };
+        if decision != Decision::Pass {
+            // Answered: Claude carries on (with or without the tool).
+            outcome.persist |= self.clear_attention(i);
+            let s = &mut self.sessions[i];
+            if s.status == SessionStatus::Attention {
+                s.status = SessionStatus::Working;
+            }
+        }
+        (outcome, true)
+    }
+
     pub fn ingest(&mut self, input: Input, now: u64) -> Outcome {
+        self.clock = self.clock.max(now);
         let source = match &input {
             Input::Claude(_) => ActivitySource::ClaudeCode,
             Input::Developer(_) => ActivitySource::Developer,
@@ -442,6 +547,9 @@ impl ActivityEngine {
             attention_dismissed: false,
             ended_at: None,
             stale: false,
+            question: None,
+            turns: 0,
+            needed_you: 0,
         });
         self.sessions.len() - 1
     }
@@ -450,6 +558,7 @@ impl ActivityEngine {
     fn clear_attention(&mut self, i: usize) -> bool {
         let s = &mut self.sessions[i];
         s.attention_dismissed = false;
+        s.question = None;
         match s.attention_event.take() {
             Some(id) => {
                 self.resolve(&id);
@@ -503,7 +612,10 @@ impl ActivityEngine {
             }
             ClaudeHook::UserPromptSubmit => {
                 persist |= self.clear_attention(i);
+                self.end_turn(i, now);
+                Self::log_usage(&mut self.turn_starts, now);
                 let s = &mut self.sessions[i];
+                s.turns = s.turns.saturating_add(1);
                 s.status = SessionStatus::Working;
                 s.turn_started_at = Some(now);
                 s.last_tool = None;
@@ -535,6 +647,21 @@ impl ActivityEngine {
             }
             ClaudeHook::PermissionRequest => {
                 outcome = self.attention(i, SessionStatus::Attention, &e, now);
+                if let (Some(ask), true) = (&e.ask, self.settings.answer_permissions) {
+                    let id = self.next_question;
+                    self.next_question += 1;
+                    self.sessions[i].question = Some(PermissionQuestion {
+                        id,
+                        tool: e.tool,
+                        summary: ask.summary.clone(),
+                        complete: ask.complete,
+                        asked_at: now,
+                        // A little before the bridge gives up, so the island
+                        // never offers an answer nobody is waiting for.
+                        expires_at: now + ANSWER_WAIT.as_millis() as u64 - 2 * SECOND,
+                    });
+                    outcome.changed = true;
+                }
             }
             ClaudeHook::Notification => match e.notification {
                 Some(NotificationKind::PermissionPrompt) | Some(NotificationKind::InputRequest) => {
@@ -548,6 +675,7 @@ impl ActivityEngine {
             },
             ClaudeHook::Stop => {
                 persist |= self.clear_attention(i);
+                self.end_turn(i, now);
                 let s = &mut self.sessions[i];
                 s.status = SessionStatus::Idle;
                 s.turn_started_at = None;
@@ -567,6 +695,7 @@ impl ActivityEngine {
             }
             ClaudeHook::StopFailure => {
                 persist |= self.clear_attention(i);
+                self.end_turn(i, now);
                 let s = &mut self.sessions[i];
                 s.status = SessionStatus::Error;
                 s.turn_started_at = None;
@@ -601,6 +730,7 @@ impl ActivityEngine {
             }
             ClaudeHook::SessionEnd => {
                 persist |= self.clear_attention(i);
+                self.end_turn(i, now);
                 let s = &mut self.sessions[i];
                 s.status = SessionStatus::Ended;
                 s.ended_at = Some(now);
@@ -632,7 +762,10 @@ impl ActivityEngine {
             || after.attention_dismissed != before.attention_dismissed
             || after.started_at != before.started_at
             || after.turn_started_at != before.turn_started_at
-            || after.stale != before.stale;
+            || after.stale != before.stale
+            || after.question != before.question
+            || after.turns != before.turns
+            || after.needed_you != before.needed_you;
         outcome.changed |= visible_change || persist;
         outcome.persist |= persist;
         outcome
@@ -652,6 +785,8 @@ impl ActivityEngine {
         // A different request supersedes the previous one.
         self.clear_attention(i);
         self.sessions[i].status = status;
+        self.sessions[i].needed_you = self.sessions[i].needed_you.saturating_add(1);
+        Self::log_usage(&mut self.needed_you, now);
         let (kind, title, detail) = match (status, e.event, e.notification) {
             (SessionStatus::Waiting, _, _) => (
                 EventKind::ClaudeWaitingForInput,
@@ -951,6 +1086,7 @@ impl ActivityEngine {
     /// Expires events, marks sessions stale and drops sessions that have
     /// been silent too long. Call at [`next_deadline`](Self::next_deadline).
     pub fn tick(&mut self, now: u64) -> Outcome {
+        self.clock = self.clock.max(now);
         let mut outcome = Outcome::default();
         for e in self.events.iter_mut() {
             if e.lifecycle == Lifecycle::Active && e.expires_at.is_some_and(|t| t <= now) {
@@ -966,6 +1102,10 @@ impl ActivityEngine {
             outcome.persist = true;
         }
         for s in self.sessions.iter_mut() {
+            if s.question.as_ref().is_some_and(|q| q.expires_at <= now) {
+                s.question = None;
+                outcome.changed = true;
+            }
             let stale = s.status == SessionStatus::Working
                 && now.saturating_sub(s.last_seen_at) >= STALE_AFTER_MS;
             if stale != s.stale {
@@ -1011,7 +1151,11 @@ impl ActivityEngine {
         let sessions = self.sessions.iter().flat_map(|s| {
             let stale = (s.status == SessionStatus::Working && !s.stale)
                 .then_some(s.last_seen_at + STALE_AFTER_MS);
-            [stale, removal_time(s)]
+            [
+                stale,
+                removal_time(s),
+                s.question.as_ref().map(|q| q.expires_at),
+            ]
         });
         events.chain(retention).chain(sessions.flatten()).min()
     }
@@ -1087,6 +1231,11 @@ impl ActivityEngine {
             }
         }
         self.settings = next;
+        if !next.answer_permissions {
+            for s in self.sessions.iter_mut() {
+                s.question = None;
+            }
+        }
         self.enforce_retention(now);
         Outcome {
             changed: true,

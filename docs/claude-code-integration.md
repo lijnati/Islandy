@@ -38,6 +38,9 @@ Each handler looks like this:
   Bash or PowerShell.
 - **`async: true`:** Claude Code never waits for Islandy (the documented semantics for async
   command hooks), and the hook's output is never shown or fed to Claude.
+- **Except `PermissionRequest`**, which is installed without `async` and with `timeout: 45`, so
+  an answer given on the island can reach Claude Code (see below). Installs from 0.2.x show
+  "Hooks need repair" until you click **Repair**.
 - **No matcher:** all tools, all notification types. Islandy filters on its side.
 
 ### Installer guarantees (`claude_settings.rs`)
@@ -164,11 +167,37 @@ It never reads or forwards prompts, `tool_input`, `tool_response`, `message`,
 variables. A test feeds a payload containing an API key and checks that the output contains
 none of it. See [privacy.md](privacy.md).
 
+### Answering permission requests on the island (opt-in)
+
+Off by default; turn on **Answer permission requests on the island** in Settings ›
+Integrations.
+
+1. On `PermissionRequest`, `islandy hook` sends the usual reduced event plus a one-line summary
+   (`ask: { summary, complete }`): the Bash/PowerShell command, the file path, the URL or search
+   query, or `server › tool` for MCP tools. `complete` is true only when that line is the whole
+   request: nothing cut, no newlines collapsed, and a tool whose input it fully describes.
+2. The receiver answers `ok` and keeps the connection open. With the setting off it answers
+   `pass` at once.
+3. The Claude panel shows the request with **Allow once** (only when `complete`), **Deny** and
+   **Answer in Claude Code**. The answer is written back as one line, `allow`, `deny` or `pass`.
+4. The bridge prints the decision as Claude Code expects
+   (`hookSpecificOutput.decision.behavior` `allow` / `deny`, with the message "Denied from
+   Islandy.") or nothing for `pass`, and exits 0.
+5. It waits at most 30 s (`ANSWER_WAIT`). The question closes on the island 2 s earlier, and
+   also when Claude Code moves on (a later tool event, Stop, a new prompt), when a newer request
+   replaces it, or when the setting is turned off. All of these mean `pass`: Claude Code asks in
+   its own prompt as usual. If Islandy isn't running, the bridge passes at once.
+
+Not verified yet: whether Claude Code shows its own permission prompt while the hook waits, or
+only after it returns. If only after, the terminal prompt appears up to 30 s later while a
+question is open on the island; **Answer in Claude Code** hands it back immediately.
+
 ### Claude Desktop
 
 To show when Claude Desktop (the chat app) is writing a reply, Islandy uses Windows UI
 Automation. While a Claude Desktop window exists it polls about every 1.2 s, and it reads only
-whether a button named "Stop response" or "Stop generating" is present. No chat content, window
+whether a button named "Stop response" or "Stop generating" (or the same in another UI
+language, compared case-insensitively) is present. No chat content, window
 text or titles are read, and nothing is stored beyond the normal activity events ("Claude
 Desktop · Working" and "Claude finished responding"). It is turned off with the Claude Code
 source toggle in Settings › Notifications. Claude Code in the Code tab uses the hooks described in this document.

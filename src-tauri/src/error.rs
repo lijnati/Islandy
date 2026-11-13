@@ -31,6 +31,8 @@ pub enum IslandyError {
     #[error("{0}")]
     Network(String),
     #[error(transparent)]
+    Location(#[from] crate::services::weather::LocationError),
+    #[error(transparent)]
     Tauri(#[from] tauri::Error),
 }
 
@@ -47,6 +49,7 @@ impl IslandyError {
             Self::Integration(e) => e.kind(),
             Self::Shortcut(_) => "shortcut",
             Self::Network(_) => "network",
+            Self::Location(e) => e.kind(),
             Self::Tauri(_) => "internal",
         }
     }

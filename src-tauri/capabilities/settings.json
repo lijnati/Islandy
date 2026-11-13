@@ -29,6 +29,7 @@
     "allow-get-media-snapshot",
     "allow-get-system-snapshot",
     "allow-search-weather-places",
+    "allow-weather-locate",
     "allow-get-update-status",
     "allow-check-for-updates",
     "allow-install-update"

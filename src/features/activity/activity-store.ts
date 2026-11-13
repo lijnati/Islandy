@@ -21,6 +21,7 @@ import type {
   ActivityUpdate,
   ClaudeIntegration,
   PeekRequest,
+  PermissionDecision,
 } from "../../services/types";
 import type { ActivityFilter } from "./activity-model";
 
@@ -52,6 +53,8 @@ export interface ActivityStoreActions {
   setFilter: (filter: ActivityFilter) => void;
   selectSession: (id: string | null) => void;
   dismiss: (id: string) => void;
+  /** Answers a permission request shown on the island (once). */
+  answer: (session: string, question: number, decision: PermissionDecision) => void;
   clearHistory: () => void;
   setQuiet: (quiet: boolean) => void;
   setSource: (source: ActivitySource, enabled: boolean) => void;
@@ -68,6 +71,7 @@ export interface ActivityDeps {
   available: () => boolean;
   connectActivity: typeof native.connectActivity;
   dismissActivity: typeof native.dismissActivity;
+  answerPermission: typeof native.answerPermission;
   clearActivityHistory: typeof native.clearActivityHistory;
   setQuietMode: typeof native.setQuietMode;
   setActivitySource: typeof native.setActivitySource;
@@ -80,6 +84,7 @@ const nativeDeps: ActivityDeps = {
   available: native.isNativeAvailable,
   connectActivity: native.connectActivity,
   dismissActivity: native.dismissActivity,
+  answerPermission: native.answerPermission,
   clearActivityHistory: native.clearActivityHistory,
   setQuietMode: native.setQuietMode,
   setActivitySource: native.setActivitySource,
@@ -206,6 +211,12 @@ export function createActivityStore(deps: ActivityDeps = nativeDeps) {
 
       dismiss: (id) => {
         command(null, () => deps.dismissActivity(id));
+      },
+
+      answer: (session, question, decision) => {
+        const key = `answer:${session}:${question}`;
+        if (get().pending[key]) return;
+        command(key, () => deps.answerPermission(session, question, decision));
       },
 
       clearHistory: () => {

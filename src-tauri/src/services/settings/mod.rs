@@ -170,8 +170,13 @@ impl SettingsService {
         self.update(next)
     }
 
+    /// Back to defaults. Whether the welcome was seen is not a preference,
+    /// so a reset doesn't bring it back.
     pub fn reset(&self) -> (Settings, SettingsState) {
-        self.update(Settings::default())
+        let welcomed = self.get().onboarding.welcomed;
+        let mut defaults = Settings::default();
+        defaults.onboarding.welcomed = welcomed;
+        self.update(defaults)
     }
 }
 
@@ -217,6 +222,15 @@ mod tests {
             SettingsService::load_from(Some(dir)).get(),
             Settings::default()
         );
+    }
+
+    #[test]
+    fn reset_keeps_the_welcome_seen() {
+        let service = SettingsService::load_from(Some(temp_dir("reset-welcome")));
+        service.modify(|s| s.onboarding.welcomed = true);
+        let (_, state) = service.reset();
+        assert!(state.settings.onboarding.welcomed);
+        assert_eq!(state.settings.appearance, Settings::default().appearance);
     }
 
     #[test]

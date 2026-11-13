@@ -17,7 +17,9 @@ use crate::{
             claude_settings::{self, ClaudeIntegration, IntegrationError},
             model::{ActivitySettings, ActivitySnapshot, ActivitySource, ActivityUpdate},
             now_ms,
-            protocol::{self, DeveloperEvent, DeveloperWire, SendError, WireEvent},
+            protocol::{
+                self, is_session_key, Decision, DeveloperEvent, DeveloperWire, SendError, WireEvent,
+            },
             ActivityCommand, ActivityService,
         },
         app_info::{self, AppInfo},
@@ -40,7 +42,7 @@ use crate::{
             SystemRequest, SystemService,
         },
         updates::{UpdateService, UpdateStatus},
-        weather::{PlaceResult, WeatherService, WeatherSnapshot},
+        weather::{self, PlaceResult, WeatherService, WeatherSnapshot},
     },
     settings_window::{self, SettingsPage as WindowPage},
     shortcut::{self, ShortcutManager, ShortcutStatus},
@@ -307,6 +309,26 @@ pub fn get_activity_snapshot(activity: State<'_, ActivityService>) -> ActivitySn
 #[tauri::command]
 pub fn dismiss_activity(activity: State<'_, ActivityService>, id: String) -> Result<()> {
     activity.command(ActivityCommand::Dismiss(activity_id(&id)?));
+    Ok(())
+}
+
+/// The user's answer to a Claude Code permission request shown on the
+/// island. Only an open question of that session can be answered.
+#[tauri::command]
+pub fn answer_permission(
+    activity: State<'_, ActivityService>,
+    session: String,
+    question: u64,
+    decision: Decision,
+) -> Result<()> {
+    if !is_session_key(&session) {
+        return Err(IslandyError::InvalidArgument("session"));
+    }
+    activity.command(ActivityCommand::Answer {
+        session,
+        id: question,
+        decision,
+    });
     Ok(())
 }
 
@@ -785,6 +807,14 @@ pub async fn search_weather_places(
     query: String,
 ) -> Result<Vec<PlaceResult>> {
     weather.search(&query).await
+}
+
+/// "Use my location" (Settings › Widgets › Weather): one read of the device
+/// position, only when the user clicks. Returns a rounded place; the caller
+/// saves it like a search result.
+#[tauri::command]
+pub async fn weather_locate() -> Result<PlaceResult> {
+    weather::locate().await
 }
 
 #[tauri::command]

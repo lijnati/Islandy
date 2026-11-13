@@ -22,6 +22,9 @@ export function session(overrides: Partial<ClaudeSession> = {}): ClaudeSession {
     attentionDismissed: false,
     endedAt: null,
     stale: false,
+    question: null,
+    turns: 1,
+    neededYou: 0,
     ...overrides,
   };
 }

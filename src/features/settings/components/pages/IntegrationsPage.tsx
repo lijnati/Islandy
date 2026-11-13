@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import { Switch } from "../../../../components/ui/Switch";
+
 import { isNativeAvailable } from "../../../../services/native";
 import type {
   ClaudeIntegration,
@@ -16,6 +18,7 @@ import {
   removeClaudeIntegration,
   testLocalReceiver,
 } from "../../settings-service";
+import { useActivitySettings } from "../../use-activity-settings";
 import { useNativeQuery } from "../../use-native-query";
 import { formatAgo } from "../../format";
 import { Button, Code, ConfirmButton, PageHeader, Row, Section, StatusText } from "../controls";
@@ -33,6 +36,31 @@ const CLAUDE_STATE: Record<
 
 function errorText(cause: unknown) {
   return cause instanceof Error ? cause.message.replace(/^[a-z_]+: /, "") : String(cause);
+}
+
+/** Opt-in: Allow / Deny permission requests from the island. */
+function AnswerPermissionsRow({ hooksState }: { hooksState: IntegrationState | undefined }) {
+  const { settings, update, ready } = useActivitySettings();
+  return (
+    <Row
+      label="Answer permission requests on the island"
+      description={
+        hooksState === "needsUpdate"
+          ? "Repair the hooks first: answering needs the updated permission hook."
+          : "Shows what Claude Code asks to do, with Allow once / Deny, in the Claude panel. While a request is open Claude Code waits up to 30 seconds for your answer, then asks in its own prompt. Allow is offered only when the whole request fits on one line; Islandy never answers by itself."
+      }
+      control={
+        <Switch
+          label="Answer permission requests on the island"
+          checked={settings?.answerPermissions ?? false}
+          disabled={!ready || !settings}
+          onChange={(on) => {
+            if (settings) update({ ...settings, answerPermissions: on });
+          }}
+        />
+      }
+    />
+  );
 }
 
 function ClaudeSection() {
@@ -63,7 +91,7 @@ function ClaudeSection() {
   return (
     <Section
       title="Claude Code"
-      description="Observational hooks in your user settings. Islandy receives the event name, an anonymous session key, the project folder name and a tool category. Never prompts, responses, commands, file contents or paths."
+      description="Hooks in your user settings. Islandy receives the event name, an anonymous session key, the project folder name and a tool category. Never prompts, responses or file contents. A permission request also carries a one-line summary of what is asked, held in memory only while it's open."
     >
       <Row
         label="Status"
@@ -170,6 +198,7 @@ function ClaudeSection() {
           </li>
         </ul>
       </details>
+      <AnswerPermissionsRow hooksState={state} />
     </Section>
   );
 }

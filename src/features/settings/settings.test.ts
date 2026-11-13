@@ -18,6 +18,15 @@ describe("settings schema", () => {
     expect(normalizeSettings(clone())).toEqual(DEFAULT_SETTINGS);
   });
 
+  it("starts fresh installs unwelcomed and keeps the flag when normalizing", () => {
+    expect(DEFAULT_SETTINGS.version).toBe(2);
+    expect(DEFAULT_SETTINGS.onboarding.welcomed).toBe(false);
+    const seen = clone();
+    seen.onboarding.welcomed = true;
+    expect(normalizeSettings(seen).onboarding.welcomed).toBe(true);
+    expect(normalizeSettings(normalizeSettings(seen))).toEqual(normalizeSettings(seen));
+  });
+
   it("clamps numbers like Rust", () => {
     const s = clone();
     s.appearance.opacity = 5;

@@ -14,7 +14,7 @@ import { openIntegrations } from "../../features/activity/navigation";
 import { formatRelative } from "../../features/island/format";
 import { useNow } from "../../hooks/useNow";
 import { useSeconds } from "../../hooks/useSeconds";
-import type { ClaudeSession } from "../../services/types";
+import type { ClaudeSession, ClaudeUsage, PermissionQuestion } from "../../services/types";
 import { Caption, Tile } from "../system/shared";
 import { focusRing } from "../ui/IconButton";
 import { StatusIndicator } from "../ui/StatusIndicator";
@@ -33,6 +33,126 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
       <Caption className="truncate whitespace-nowrap">{label}</Caption>
       <span className="truncate text-body text-fg tabular-nums">{children}</span>
     </div>
+  );
+}
+
+const ASK_VERB: Partial<Record<NonNullable<PermissionQuestion["tool"]>, string>> = {
+  running: "run",
+  editing: "edit",
+  reading: "read",
+  web: "use the web for",
+  searching: "search",
+};
+
+const answerButton = (tone: "primary" | "plain") =>
+  cx(
+    "inline-flex h-7 shrink-0 items-center rounded-full px-3 text-caption font-medium transition-colors duration-fast disabled:opacity-50",
+    focusRing,
+    tone === "primary"
+      ? "bg-accent text-on-accent hover:bg-accent/90"
+      : "border border-hairline text-fg-muted hover:bg-surface-hover hover:text-fg",
+  );
+
+/**
+ * A permission request answered here instead of in the terminal. Allow is
+ * offered only when the summary is the whole request.
+ */
+export function PermissionCard({
+  session,
+  question,
+  now: minuteNow,
+}: {
+  session: string;
+  question: PermissionQuestion;
+  now: number;
+}) {
+  const busy = useActivity((s) => s.pending[`answer:${session}:${question.id}`] === true);
+  const now = useSeconds(true, minuteNow);
+  const left = Math.max(0, Math.ceil((question.expiresAt - now) / 1000));
+  const verb = (question.tool && ASK_VERB[question.tool]) ?? "use";
+  const answer = (decision: "allow" | "deny" | "pass") => {
+    activityStore.getState().answer(session, question.id, decision);
+  };
+  return (
+    <div
+      role="group"
+      aria-label="Permission request"
+      className="flex flex-col gap-2 rounded-control border border-status-waiting/30 bg-status-waiting/10 px-3 py-2"
+    >
+      <span className="text-body font-medium text-fg">Claude wants to {verb}</span>
+      <code
+        title={question.summary}
+        className="truncate rounded-[6px] bg-surface-raised px-2 py-1 font-mono text-caption text-fg"
+      >
+        {question.summary}
+      </code>
+      {!question.complete && (
+        <span className="text-caption text-fg-muted">
+          Not all of this request is shown here, so it can only be allowed in Claude Code.
+        </span>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {question.complete && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              answer("allow");
+            }}
+            className={answerButton("primary")}
+          >
+            Allow once
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            answer("deny");
+          }}
+          className={answerButton("plain")}
+        >
+          Deny
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            answer("pass");
+          }}
+          className={answerButton("plain")}
+        >
+          Answer in Claude Code
+        </button>
+        <span className="ml-auto text-caption text-fg-muted tabular-nums" aria-live="off">
+          {left}s
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const hoursMinutes = (ms: number) => {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+};
+
+/** Last 24 hours of Claude activity, from hook timing only. */
+export function UsageGlance({ usage }: { usage: ClaudeUsage }) {
+  if (usage.turns === 0 && usage.neededYou === 0) return null;
+  const turns = usage.turns === 1 ? "1 turn" : `${usage.turns} turns`;
+  const needed =
+    usage.neededYou === 0
+      ? "never needed you"
+      : usage.neededYou === 1
+        ? "needed you once"
+        : `needed you ${usage.neededYou}×`;
+  return (
+    <p className="text-caption text-fg-muted tabular-nums">
+      {usage.partial ? "Since Islandy started" : "Last 24 hours"}: {turns} ·{" "}
+      {hoursMinutes(usage.workedMs)} working · {needed}
+    </p>
   );
 }
 
@@ -95,7 +215,9 @@ function SessionDetail({ session, now: minuteNow }: { session: ClaudeSession; no
         />
       </div>
 
-      {needsAttention(session) ? (
+      {session.question ? (
+        <PermissionCard session={session.id} question={session.question} now={minuteNow} />
+      ) : needsAttention(session) ? (
         <div
           role="status"
           className="flex items-center gap-3 rounded-control border border-status-waiting/30 bg-status-waiting/10 px-3 py-2"
@@ -142,6 +264,14 @@ function SessionDetail({ session, now: minuteNow }: { session: ClaudeSession; no
         </div>
       )}
 
+      {session.turns > 0 && (
+        <p className="text-caption text-fg-muted tabular-nums">
+          {session.turns === 1 ? "1 turn" : `${session.turns} turns`} this session
+          {session.neededYou > 0 &&
+            ` · needed you ${session.neededYou === 1 ? "once" : `${session.neededYou}×`}`}
+        </p>
+      )}
+
       {session.subagents > 0 && (
         <p className="text-caption text-fg-muted">
           {session.subagents === 1
@@ -173,6 +303,7 @@ export function ClaudePanel() {
   const selectedId = useActivity((s) => s.selectedSession);
   const integration = useActivity((s) => s.integration.status?.state);
   const selected = sessions.find((s) => s.id === selectedId) ?? sessions[0];
+  const usage = useActivity((s) => s.snapshot?.usage);
 
   if (!selected) {
     return (
@@ -209,8 +340,9 @@ export function ClaudePanel() {
           <SessionList sessions={sessions} selected={selected.id} />
         </div>
       )}
-      <div className="flex min-w-0 flex-1 rounded-tile border border-hairline bg-surface-secondary p-3 shadow-surface">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 rounded-tile border border-hairline bg-surface-secondary p-3 shadow-surface">
         <SessionDetail session={selected} now={now} />
+        {usage && <UsageGlance usage={usage} />}
       </div>
     </div>
   );

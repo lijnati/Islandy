@@ -6,7 +6,8 @@
 //! search, the typed place name) and a generic user agent. Results are kept
 //! in memory only. Requests happen on demand, when the dashboard shows the
 //! widget and the cached forecast is older than [`FRESH_FOR`]; there is no
-//! background polling.
+//! background polling. "Use my location" reads the device position once,
+//! only when that button is clicked.
 
 use std::{
     sync::{
@@ -434,9 +435,142 @@ impl WeatherService {
     }
 }
 
+/* ------------------------------------------------------------------------ */
+/* "Use my location" (one-shot, only when the user asks)                     */
+/* ------------------------------------------------------------------------ */
+
+#[cfg(windows)]
+const LOCATION_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Why the one-shot location read failed (user-facing text).
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum LocationError {
+    #[error(
+        "Windows didn't allow Islandy to read your location. Turn on Location in Windows \
+         Settings › Privacy & security › Location, including \"Let desktop apps access your \
+         location\", then try again."
+    )]
+    #[cfg_attr(not(windows), allow(dead_code))] // only constructed on Windows
+    Denied,
+    #[error("Windows didn't answer with a location in time. Try again, or search for a place.")]
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Timeout,
+    #[error("Your location isn't available right now. Search for a place instead.")]
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Unavailable,
+    #[cfg_attr(windows, allow(dead_code))] // only constructed off Windows
+    #[error("Location isn't available on this platform. Search for a place instead.")]
+    Unsupported,
+}
+
+impl LocationError {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Denied => "denied",
+            Self::Timeout => "timeout",
+            Self::Unavailable => "unavailable",
+            Self::Unsupported => "unsupported",
+        }
+    }
+}
+
+/// Name shown for a place found by location (Open-Meteo has no reverse
+/// geocoding, and none is added).
+#[cfg_attr(not(windows), allow(dead_code))] // only used by the Windows reader
+pub const CURRENT_LOCATION_NAME: &str = "Current location";
+
+/// A [`PlaceResult`] for coordinates read from the device: rounded to the
+/// forecast's precision, named "Current location", with the coordinates as
+/// the detail. `None` for non-finite or out-of-range values.
+#[cfg_attr(not(windows), allow(dead_code))] // only used by the Windows reader
+pub fn place_from_coordinates(latitude: f64, longitude: f64) -> Option<PlaceResult> {
+    let place = WeatherLocation {
+        name: CURRENT_LOCATION_NAME.into(),
+        detail: String::new(),
+        latitude,
+        longitude,
+    }
+    .sanitized()?;
+    Some(PlaceResult {
+        detail: format!("{:.2}, {:.2}", place.latitude, place.longitude),
+        name: place.name,
+        latitude: place.latitude,
+        longitude: place.longitude,
+    })
+}
+
+#[cfg(windows)]
+fn read_position() -> std::result::Result<(f64, f64), LocationError> {
+    use windows::Devices::Geolocation::{GeolocationAccessStatus, Geolocator};
+
+    use crate::services::winrt::{wait, with_mta, WaitError};
+
+    const E_ACCESSDENIED: i32 = 0x8007_0005_u32 as i32;
+    let map = |e: WaitError| match e {
+        WaitError::Timeout => LocationError::Timeout,
+        WaitError::Failed(e) if e.code().0 == E_ACCESSDENIED => LocationError::Denied,
+        WaitError::Failed(_) => LocationError::Unavailable,
+    };
+    with_mta(|| {
+        // Asking is what lets Windows show its own prompt, if it needs one.
+        let access = wait(Geolocator::RequestAccessAsync(), LOCATION_TIMEOUT).map_err(map)?;
+        match access {
+            GeolocationAccessStatus::Allowed => {}
+            GeolocationAccessStatus::Denied => return Err(LocationError::Denied),
+            _ => return Err(LocationError::Unavailable),
+        }
+        // The default accuracy is the coarse one: no GPS is forced on.
+        let locator = Geolocator::new().map_err(|_| LocationError::Unavailable)?;
+        let position = wait(locator.GetGeopositionAsync(), LOCATION_TIMEOUT).map_err(map)?;
+        let point = position
+            .Coordinate()
+            .and_then(|c| c.Point())
+            .and_then(|p| p.Position())
+            .map_err(|_| LocationError::Unavailable)?;
+        Ok((point.Latitude, point.Longitude))
+    })
+}
+
+/// Reads the device location once, on a blocking thread. Only called from
+/// the "Use my location" button; nothing is stored or refreshed here.
+pub async fn locate() -> Result<PlaceResult> {
+    #[cfg(windows)]
+    {
+        let (latitude, longitude) = tauri::async_runtime::spawn_blocking(read_position)
+            .await
+            .map_err(|_| IslandyError::from(LocationError::Unavailable))?
+            .map_err(IslandyError::from)?;
+        place_from_coordinates(latitude, longitude).ok_or(LocationError::Unavailable.into())
+    }
+    #[cfg(not(windows))]
+    {
+        Err(LocationError::Unsupported.into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_and_rounds_a_located_place() {
+        let p = place_from_coordinates(9.031_234, 38.768_9).unwrap();
+        assert_eq!(p.name, "Current location");
+        assert_eq!((p.latitude, p.longitude), (9.03, 38.77));
+        assert_eq!(p.detail, "9.03, 38.77");
+        assert!(place_from_coordinates(f64::NAN, 0.0).is_none());
+        assert!(place_from_coordinates(91.0, 0.0).is_none());
+    }
+
+    #[test]
+    fn location_errors_have_frontend_kinds() {
+        assert_eq!(LocationError::Denied.kind(), "denied");
+        assert!(LocationError::Denied
+            .to_string()
+            .contains("Let desktop apps"));
+        assert_eq!(LocationError::Timeout.kind(), "timeout");
+        assert_eq!(LocationError::Unsupported.kind(), "unsupported");
+    }
 
     // Recorded from api.open-meteo.com (trimmed).
     const FORECAST: &str = r#"{"latitude":9.03,"longitude":38.77,"timezone":"Africa/Addis_Ababa",

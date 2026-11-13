@@ -377,6 +377,37 @@ export interface ClaudeSession {
   endedAt: number | null;
   /** Working, but no event for a long time: status unknown. */
   stale: boolean;
+  /** An open permission request answerable on the island (memory only). */
+  question: PermissionQuestion | null;
+  /** Turns (prompts) seen in this session. */
+  turns: number;
+  /** Times this session needed the user. */
+  neededYou: number;
+}
+
+/** Mirrors `model::PermissionQuestion`. */
+export interface PermissionQuestion {
+  id: number;
+  tool: ToolCategory | null;
+  /** The command, path, URL or tool, one line. */
+  summary: string;
+  /** `summary` is the whole request; otherwise only Deny is offered. */
+  complete: boolean;
+  askedAt: number;
+  /** After this, Claude Code asks in its own prompt instead. */
+  expiresAt: number;
+}
+
+/** Mirrors `protocol::Decision`. */
+export type PermissionDecision = "allow" | "deny" | "pass";
+
+/** Claude activity over the last 24 hours (since Islandy started). */
+export interface ClaudeUsage {
+  turns: number;
+  workedMs: number;
+  neededYou: number;
+  /** Islandy has run for less than the whole day. */
+  partial: boolean;
 }
 
 export interface SourceToggles {
@@ -405,6 +436,8 @@ export interface ActivitySettings {
   peekDuration: PeekDuration;
   /** 1–30 days. */
   retentionDays: number;
+  /** Claude Code permission requests can be answered on the island. */
+  answerPermissions: boolean;
 }
 
 export interface LastReceived {
@@ -423,6 +456,7 @@ export interface ActivitySnapshot {
   receiver: ReceiverStatus;
   historyError: boolean;
   lastReceived: LastReceived;
+  usage: ClaudeUsage;
 }
 
 export interface PeekRequest {
@@ -534,6 +568,12 @@ export interface Settings {
   widgets: { items: WidgetEntry[] };
   weather: WeatherSettings;
   updates: UpdateSettings;
+  onboarding: OnboardingSettings;
+}
+
+/** Mirrors `OnboardingSettings`: the welcome page was finished or skipped. */
+export interface OnboardingSettings {
+  welcomed: boolean;
 }
 
 /* Weather (mirrors `services/weather.rs`) */
@@ -617,7 +657,8 @@ export type SettingsPageId =
   | "integrations"
   | "notifications"
   | "privacy"
-  | "about";
+  | "about"
+  | "welcome";
 
 export type SettingsPush =
   { type: "state"; state: SettingsState } | { type: "navigate"; page: SettingsPageId };

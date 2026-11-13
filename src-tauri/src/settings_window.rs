@@ -23,6 +23,8 @@ pub enum SettingsPage {
     Notifications,
     Privacy,
     About,
+    /// First-run welcome (not in the sidebar).
+    Welcome,
 }
 
 impl SettingsPage {
@@ -36,6 +38,7 @@ impl SettingsPage {
             Self::Notifications => "notifications",
             Self::Privacy => "privacy",
             Self::About => "about",
+            Self::Welcome => "welcome",
         }
     }
 }
@@ -96,6 +99,7 @@ mod tests {
             SettingsPage::Notifications,
             SettingsPage::Privacy,
             SettingsPage::About,
+            SettingsPage::Welcome,
         ] {
             let json = serde_json::to_value(page).unwrap();
             assert_eq!(json, page.slug());

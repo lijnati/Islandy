@@ -196,6 +196,44 @@ pub struct ClaudeSession {
     pub ended_at: Option<u64>,
     /// No event for a long time while working/waiting: status unknown.
     pub stale: bool,
+    /// An open permission request that can be answered on the island (only
+    /// with "Answer permission requests" on). Memory only.
+    pub question: Option<PermissionQuestion>,
+    /// Turns (prompts) Islandy has seen in this session.
+    pub turns: u32,
+    /// Times this session needed the user (permission or input requests).
+    pub needed_you: u32,
+}
+
+/// A permission request waiting for Allow / Deny on the island.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionQuestion {
+    /// Identifies this request when answering (a newer one replaces it).
+    pub id: u64,
+    pub tool: Option<ToolCategory>,
+    /// The command, path, URL or tool, one line.
+    pub summary: String,
+    /// `summary` is the whole request; otherwise Allow isn't offered.
+    pub complete: bool,
+    pub asked_at: u64,
+    /// After this Claude Code asks in its own prompt instead.
+    pub expires_at: u64,
+}
+
+/// Claude activity over the last 24 hours (memory only, since Islandy
+/// started), from the hooks' timing alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeUsage {
+    /// Turns started.
+    pub turns: u32,
+    /// Time Claude spent working, including turns still running.
+    pub worked_ms: u64,
+    /// Times Claude needed the user.
+    pub needed_you: u32,
+    /// Islandy has been running for less than the whole window.
+    pub partial: bool,
 }
 
 /* -------------------------------------------------------------------------- */
@@ -308,6 +346,8 @@ pub struct ActivitySettings {
     pub peek_duration: PeekDuration,
     /// History is kept this many days (and at most `MAX_EVENTS` events).
     pub retention_days: u8,
+    /// Permission requests can be answered (Allow / Deny) on the island.
+    pub answer_permissions: bool,
 }
 
 impl Default for ActivitySettings {
@@ -318,6 +358,7 @@ impl Default for ActivitySettings {
             peeks: PeekToggles::default(),
             peek_duration: PeekDuration::default(),
             retention_days: 7,
+            answer_permissions: false,
         }
     }
 }
@@ -355,6 +396,7 @@ pub struct ActivitySnapshot {
     /// When each source last delivered anything (including events that
     /// aren't recorded, such as tool use), for troubleshooting.
     pub last_received: LastReceived,
+    pub usage: ClaudeUsage,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
@@ -435,6 +477,7 @@ mod tests {
                 receiver: ReceiverStatus::Listening,
                 history_error: false,
                 last_received: LastReceived::default(),
+                usage: ClaudeUsage::default(),
             },
         })
         .unwrap();

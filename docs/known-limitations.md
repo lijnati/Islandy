@@ -35,16 +35,23 @@
 - **Fullscreen detection** polls every 2 s (cheap Win32 calls) and compares the foreground window
   with the island's monitor; see [windows-integration.md](windows-integration.md).
 - **Frost** uses translucency without blurring the desktop (no native acrylic).
-- **Unsigned, no auto-update:** SmartScreen warns; updates are manual (docs/release.md).
+- **Unsigned installer:** SmartScreen warns on first install. Updates themselves are signed and installed automatically (docs/release.md).
 - **Windows session end** terminates Islandy without its shutdown path; the last ~1.5 s of activity
   history may be lost.
 - **Idle memory on Windows** is unmeasured; the WebView is the dominant cost.
 - **Linux** is a development host only; transparency there needs a compositor, and only the
   input region is applied.
-- **Weather** needs a place chosen by hand (Islandy doesn't use Windows location services or IP
-  geolocation). Forecast quality is Open-Meteo's.
+- **Weather** location comes from a place you choose, or once from Windows location services
+  when you click **Use my location** (not refreshed when you move; no IP geolocation). The
+  location read is untested on real Windows hardware. Forecast quality is Open-Meteo's.
 - **Updates** install only from full GitHub releases (not pre-releases), need the signing secrets
   in CI, and are installed while idle only on Windows (elsewhere: on request).
-- **Claude Desktop detection** depends on the English accessible name of Claude's "Stop response"
-  button, so it may miss other UI languages or future Claude Desktop changes. It has not yet
+- **Claude Desktop detection** depends on the accessible name of Claude's "Stop response"
+  button. English is known; the other languages are best-effort translations, not verified
+  against Claude Desktop, and future Claude Desktop changes may break it. It has not yet
   been verified on real Windows hardware.
+- **Permission answers on the island** are untested against a real Claude Code session. If
+  Claude Code only shows its own prompt after the hook returns, that prompt can appear up to
+  30 s late while a question is open on the island. Allow is never offered for MCP tools,
+  unknown tools, multi-line or long commands.
+- **The usage glance** is in memory: it restarts with Islandy and covers at most 24 hours.

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "general": {
     "toggleShortcut": "Ctrl+Alt+Space",
     "startHiddenAtLogin": false,
@@ -65,5 +65,8 @@
   "updates": {
     "autoCheck": true,
     "autoInstall": true
+  },
+  "onboarding": {
+    "welcomed": false
   }
 }

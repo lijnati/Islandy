@@ -13,6 +13,10 @@
 //! - Two token buckets: connections, and authenticated events.
 //! - The only effect of a message is a new activity event. Nothing is ever
 //!   executed, opened or written on a client's behalf.
+//! - A permission request (an event with `ask`) keeps its connection open
+//!   after `ok`: the [`Responder`] later writes one line, `allow`, `deny` or
+//!   `pass`, chosen by the user on the island. If it is dropped unanswered
+//!   it writes `pass` (Claude Code then asks as usual).
 
 use std::{
     io::{Read, Write},
@@ -26,7 +30,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::protocol::{self, ReceiverInfo, Rejection, WireEvent, MAX_MESSAGE};
+use super::protocol::{self, Decision, ReceiverInfo, Rejection, WireEvent, MAX_MESSAGE};
 use crate::services::paths;
 
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
@@ -64,7 +68,40 @@ impl RateLimiter {
 }
 
 /// Accepts a validated event, or refuses it (e.g. the app is shutting down).
-pub type Sink = Box<dyn Fn(WireEvent) -> Result<(), Rejection> + Send>;
+/// Permission requests come with the [`Responder`] that answers them.
+pub type Sink = Box<dyn Fn(WireEvent, Option<Responder>) -> Result<(), Rejection> + Send>;
+
+/// The open connection of a permission request, answered at most once.
+/// Dropping it unanswered answers `pass`.
+#[derive(Debug)]
+pub struct Responder {
+    stream: Option<TcpStream>,
+}
+
+impl Responder {
+    fn new(stream: TcpStream) -> Self {
+        Self {
+            stream: Some(stream),
+        }
+    }
+
+    pub fn answer(mut self, decision: Decision) {
+        self.write(decision);
+    }
+
+    fn write(&mut self, decision: Decision) {
+        if let Some(mut stream) = self.stream.take() {
+            let _ = stream.write_all(format!("{}\n", decision.word()).as_bytes());
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+    }
+}
+
+impl Drop for Responder {
+    fn drop(&mut self) {
+        self.write(Decision::Pass);
+    }
+}
 
 pub struct Receiver {
     stop: Arc<AtomicBool>,
@@ -173,24 +210,47 @@ fn handle(mut stream: TcpStream, token: &str, events: &mut RateLimiter, sink: &S
             if !events.allow(Instant::now()) {
                 return Err(Rejection::RateLimited);
             }
-            match event {
-                WireEvent::Ping => Ok(()),
-                event => sink(event),
-            }
+            Ok(event)
         });
-    let reply = match result {
-        Ok(()) => "ok\n".to_owned(),
-        Err(rejection) => {
-            #[cfg(debug_assertions)]
-            crate::log_warn!(
-                "receiver",
-                "receiver rejected a message: {}",
-                rejection.code()
-            );
-            format!("error {}\n", rejection.code())
+    let event = match result {
+        Ok(WireEvent::Ping) => {
+            let _ = stream.write_all(b"ok\n");
+            let _ = stream.shutdown(Shutdown::Both);
+            return;
         }
+        Ok(event) => event,
+        Err(rejection) => return reject(stream, rejection),
     };
-    let _ = stream.write_all(reply.as_bytes());
+    let asks = matches!(&event, WireEvent::Claude(e) if e.ask.is_some());
+    if !asks {
+        match sink(event, None) {
+            Ok(()) => {
+                let _ = stream.write_all(b"ok\n");
+                let _ = stream.shutdown(Shutdown::Both);
+            }
+            Err(rejection) => reject(stream, rejection),
+        }
+        return;
+    }
+    // A permission request: `ok` now, the answer later on this connection.
+    if stream.write_all(b"ok\n").is_err() {
+        return;
+    }
+    // The answer is written from another thread; a stuck client must not
+    // block it.
+    let _ = stream.set_write_timeout(Some(READ_TIMEOUT));
+    // On rejection the responder is dropped, which answers `pass`.
+    let _ = sink(event, Some(Responder::new(stream)));
+}
+
+fn reject(mut stream: TcpStream, rejection: Rejection) {
+    #[cfg(debug_assertions)]
+    crate::log_warn!(
+        "receiver",
+        "receiver rejected a message: {}",
+        rejection.code()
+    );
+    let _ = stream.write_all(format!("error {}\n", rejection.code()).as_bytes());
     let _ = stream.shutdown(Shutdown::Both);
 }
 
@@ -223,7 +283,7 @@ mod tests {
 
     use super::*;
     use crate::services::activity::protocol::{
-        send, session_key, ClaudeHook, ClaudeWire, SendError,
+        send, session_key, ClaudeHook, ClaudeWire, Decision, SendError,
     };
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -242,6 +302,7 @@ mod tests {
             notification: None,
             error: None,
             subagent: false,
+            ask: None,
         })
     }
 
@@ -249,7 +310,7 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         let receiver = Receiver::start(
             dir,
-            Box::new(move |e| tx.send(e).map_err(|_| Rejection::Unavailable)),
+            Box::new(move |e, _| tx.send(e).map_err(|_| Rejection::Unavailable)),
         )
         .unwrap();
         (receiver, rx)
@@ -386,5 +447,72 @@ mod tests {
         assert!(rx.try_iter().count() < 90);
         receiver.shutdown();
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn ask_event() -> WireEvent {
+        WireEvent::Claude(ClaudeWire {
+            event: ClaudeHook::PermissionRequest,
+            ask: Some(protocol::PermissionAsk {
+                summary: "cargo test".into(),
+                complete: true,
+            }),
+            ..match stop_event() {
+                WireEvent::Claude(e) => e,
+                _ => unreachable!(),
+            }
+        })
+    }
+
+    #[test]
+    fn permission_requests_wait_for_the_answer() {
+        let dir = temp_dir("ask");
+        let (tx, rx) = mpsc::channel::<Responder>();
+        let tx = std::sync::Mutex::new(tx);
+        let mut receiver = Receiver::start(
+            &dir,
+            Box::new(move |_, responder| {
+                if let Some(r) = responder {
+                    let _ = tx.lock().unwrap().send(r);
+                }
+                Ok(())
+            }),
+        )
+        .unwrap();
+        let answerer = std::thread::spawn(move || {
+            let r = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+            r.answer(Decision::Allow);
+            // Dropped unanswered: pass.
+            drop(rx.recv_timeout(Duration::from_secs(2)).unwrap());
+        });
+        let wait = Duration::from_secs(2);
+        assert_eq!(protocol::ask(&dir, &ask_event(), wait), Decision::Allow);
+        assert_eq!(protocol::ask(&dir, &ask_event(), wait), Decision::Pass);
+        answerer.join().unwrap();
+        receiver.shutdown();
+        // Islandy not running: pass, at once.
+        assert_eq!(protocol::ask(&dir, &ask_event(), wait), Decision::Pass);
+    }
+
+    #[test]
+    fn a_question_nobody_answers_times_out_as_pass() {
+        let dir = temp_dir("ask-timeout");
+        let (tx, rx) = mpsc::channel::<Responder>();
+        let tx = std::sync::Mutex::new(tx);
+        let mut receiver = Receiver::start(
+            &dir,
+            Box::new(move |_, responder| {
+                let _ = tx.lock().unwrap().send(responder.unwrap());
+                Ok(())
+            }),
+        )
+        .unwrap();
+        let started = Instant::now();
+        assert_eq!(
+            protocol::ask(&dir, &ask_event(), Duration::from_millis(300)),
+            Decision::Pass
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+        drop(rx);
+        receiver.shutdown();
     }
 }

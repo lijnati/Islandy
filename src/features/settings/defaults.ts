@@ -7,7 +7,7 @@ import type { ActivitySettings, Settings } from "../../services/types";
 export const DEFAULT_SHORTCUT = "Ctrl+Alt+Space";
 
 export const DEFAULT_SETTINGS: Settings = {
-  version: 1,
+  version: 2,
   general: {
     toggleShortcut: DEFAULT_SHORTCUT,
     startHiddenAtLogin: false,
@@ -50,6 +50,9 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   weather: { location: null, unit: "celsius" },
   updates: { autoCheck: true, autoInstall: true },
+  // Fresh installs see the welcome page; Rust migrates version 1 files (every
+  // existing install) to `true`.
+  onboarding: { welcomed: false },
 };
 
 /** Mirrors `ActivitySettings::default()` in `services/activity/model.rs`. */
@@ -66,4 +69,5 @@ export const DEFAULT_ACTIVITY_SETTINGS: ActivitySettings = {
   },
   peekDuration: "standard",
   retentionDays: 7,
+  answerPermissions: false,
 };

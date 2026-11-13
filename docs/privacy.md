@@ -20,11 +20,32 @@ This page lists what it reads, keeps and sends.
 | Claude Code (Phase 4, opt-in) | Hook event name, a hash of the session id, the _last folder name_ of the working directory, a tool category, a reduced notification type and error type | Session state in memory; history events (kind, title written by Islandy, folder name, opaque session key, time) in `activity.json` |
 | Developer events              | What you pass to `islandy notify` (event, project, label, message title)                                                                                | History events in `activity.json`                                                                                                  |
 
+### Permission requests (opt-in)
+
+With **Answer permission requests on the island** on (Settings › Integrations, off by default),
+the `PermissionRequest` hook also sends Islandy a one-line summary of what is asked: the
+command, the file path, the URL or search query, or the MCP server and tool name (never the MCP
+tool's arguments). It travels only over the local loopback connection, is shown in the Claude
+panel and kept in memory only while the request is open (at most 30 s). It is never written to
+`activity.json` or the logs. With the setting off, Islandy discards it on arrival.
+
+### Usage glance
+
+Turns, working time and "needed you" counts are computed from hook timing in memory, cover the
+last 24 hours since Islandy started, and are never stored or sent.
+
+### Weather location
+
+**Use my location** asks Windows location services once, only when you click it. The position
+is rounded to 2 decimals (≈ 1 km), saved as the weather place on this device, and sent only to
+Open-Meteo as the forecast coordinates. It is not refreshed later.
+
 ### Claude Desktop
 
 To show when Claude Desktop (the chat app) is writing a reply, Islandy uses Windows UI
 Automation. While a Claude Desktop window exists it polls about every 1.2 s, and it reads only
-whether a button named "Stop response" or "Stop generating" is present. No chat content, window
+whether a button named "Stop response" or "Stop generating" (or the same in another UI
+language, compared case-insensitively) is present. No chat content, window
 text or titles are read, and nothing is stored beyond the normal activity events ("Claude
 Desktop · Working" and "Claude finished responding"). It is turned off with the Claude Code
 source toggle in Settings › Notifications. Claude Code in the Code tab uses the hooks above.

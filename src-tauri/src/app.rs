@@ -70,6 +70,9 @@ pub fn run() {
         if at_login { " at sign-in" } else { "" }
     );
     let first_run = !at_login && settings.state().load_status == LoadStatus::Fresh;
+    // The welcome page opens until it is finished or skipped (never at
+    // sign-in); upgraded installs are migrated to "welcomed".
+    let show_welcome = !at_login && !initial.onboarding.welcomed;
     settings.ensure_saved();
     let start_hidden = at_login && initial.general.start_hidden_at_login;
 
@@ -118,6 +121,7 @@ pub fn run() {
             commands::connect_activity,
             commands::get_activity_snapshot,
             commands::dismiss_activity,
+            commands::answer_permission,
             commands::clear_activity_history,
             commands::set_quiet_mode,
             commands::set_activity_source,
@@ -142,6 +146,7 @@ pub fn run() {
             commands::get_diagnostics,
             commands::get_weather,
             commands::search_weather_places,
+            commands::weather_locate,
             commands::get_update_status,
             commands::check_for_updates,
             commands::install_update,
@@ -166,6 +171,9 @@ pub fn run() {
             // at the wrong size or position.
             island.initialize()?;
             island.show()?;
+            if show_welcome {
+                settings_window::open_detached(app.handle(), SettingsPage::Welcome);
+            }
             let stop = Arc::new(AtomicBool::new(false));
             spawn_watcher(app.handle().clone(), stop.clone());
             UpdateService::spawn_loop(app.handle().clone(), stop.clone());

@@ -24,6 +24,7 @@ function setup(overrides: Partial<ActivityDeps> = {}, initial: ActivitySnapshot 
       return Promise.resolve(initial);
     }),
     dismissActivity: vi.fn(() => Promise.resolve()),
+    answerPermission: vi.fn(() => Promise.resolve()),
     clearActivityHistory: vi.fn(() => Promise.resolve()),
     setQuietMode: vi.fn(() => Promise.resolve()),
     setActivitySource: vi.fn(() => Promise.resolve()),

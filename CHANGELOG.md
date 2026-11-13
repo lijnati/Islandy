@@ -4,6 +4,32 @@ All notable changes to Islandy. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-11-13
+
+### Added
+
+- **Answer Claude Code permission requests on the island** (opt-in: Settings › Integrations).
+  The Claude panel shows what Claude Code asks to do (the command, file, URL or tool) with
+  **Allow once**, **Deny** and **Answer in Claude Code**. Claude Code waits up to 30 seconds,
+  then asks in its own prompt as before. Allow is offered only when the whole request fits on
+  one line; Islandy never answers by itself. The request summary stays in memory only while
+  it's open. Needs the hooks repaired once (the permission hook now runs synchronously).
+- **Claude usage glance**: turns, time Claude spent working and how often it needed you over
+  the last 24 hours, plus per-session counts, in the Claude panel. Computed from hook timing
+  only, in memory; nothing is stored or sent.
+- **Weather "Use my location"**: reads your position once from Windows location services when
+  you click it, rounded to about 1 km, instead of typing a city.
+- **Welcome page** on first launch (fresh installs only) pointing to the Claude Code hooks, the
+  weather place and the island shortcut. Reopen it from Settings › About.
+- **Windows CI**: every push runs the full check suite on Windows and starts the app as a
+  smoke test.
+
+### Changed
+
+- Claude Desktop detection matches the stop button's name case-insensitively and in more
+  languages (French, German, Spanish, Italian, Portuguese, Japanese, Korean, Hindi,
+  Indonesian, Chinese). The non-English names are best-effort and unverified.
+
 ## [0.2.1] — 2026-11-13
 
 ### Added

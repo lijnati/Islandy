@@ -30,6 +30,7 @@ export {
   setToggleShortcut,
   updateSettings,
   searchWeatherPlaces,
+  weatherLocate,
   getUpdateStatus,
   checkForUpdates,
   installUpdate,

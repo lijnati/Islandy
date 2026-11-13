@@ -1,9 +1,10 @@
 //! Claude Desktop (the chat app) has no hooks, so on Windows Islandy watches
 //! for its "Stop response" button through UI Automation: the button exists
-//! exactly while Claude is writing a reply.
+//! exactly while Claude is writing a reply. Its name is matched in many UI
+//! languages, case-insensitively (see `STOP_NAMES`).
 //!
 //! Privacy: the probe asks the Claude window one question, "is there a
-//! button named Stop response?". It reads no message text, titles or other
+//! button with a stop-response name?". It reads no message text, titles or other
 //! content, and nothing leaves the machine. It only runs while a Claude
 //! Desktop window exists, and only while the Claude source is on.
 //!
@@ -24,6 +25,51 @@ const HEARTBEAT_MS: u64 = 60_000;
 const DONE_AFTER: u8 = 2;
 /// Shown as the session's name in the island.
 pub const PROJECT: &str = "Claude Desktop";
+
+/// Accessible names of Claude's stop button across its UI languages, matched
+/// case-insensitively. "Stop response" and "Stop generating" (English) are the
+/// names seen in the app. The other languages are best-effort natural
+/// translations of those two phrases and are UNVERIFIED against Claude's own
+/// localized strings; a language whose wording differs simply isn't detected
+/// until its name is added here.
+#[cfg_attr(not(windows), allow(dead_code))]
+const STOP_NAMES: &[&str] = &[
+    // English
+    "Stop response",
+    "Stop generating",
+    // French
+    "Arrêter la réponse",
+    "Arrêter la génération",
+    // German
+    "Antwort stoppen",
+    "Generierung stoppen",
+    // Spanish
+    "Detener respuesta",
+    "Detener generación",
+    // Italian
+    "Interrompi risposta",
+    "Interrompi generazione",
+    // Portuguese (Brazil)
+    "Parar resposta",
+    "Parar geração",
+    // Japanese
+    "応答を停止",
+    "生成を停止",
+    // Korean
+    "응답 중지",
+    "생성 중지",
+    // Hindi
+    "प्रतिक्रिया रोकें",
+    "जनरेट करना रोकें",
+    // Indonesian
+    "Hentikan respons",
+    "Hentikan pembuatan",
+    // Chinese (Simplified, Traditional)
+    "停止响应",
+    "停止生成",
+    "停止回應",
+    "停止產生",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -96,6 +142,7 @@ fn wire(event: ClaudeHook) -> ClaudeWire {
         notification: None,
         error: None,
         subagent: false,
+        ask: None,
     }
 }
 
@@ -134,8 +181,8 @@ mod windows_probe {
             UI::{
                 Accessibility::{
                     CUIAutomation, IUIAutomation, IUIAutomation2, IUIAutomationCondition,
-                    TreeScope_Descendants, UIA_ButtonControlTypeId, UIA_ControlTypePropertyId,
-                    UIA_NamePropertyId,
+                    PropertyConditionFlags_IgnoreCase, TreeScope_Descendants,
+                    UIA_ButtonControlTypeId, UIA_ControlTypePropertyId, UIA_NamePropertyId,
                 },
                 WindowsAndMessaging::{
                     EnumWindows, GetClassNameW, GetWindowTextLengthW, GetWindowThreadProcessId,
@@ -144,10 +191,7 @@ mod windows_probe {
         },
     };
 
-    use super::Probe;
-
-    /// The accessible names of Claude's stop button.
-    const STOP_NAMES: [&str; 2] = ["Stop response", "Stop generating"];
+    use super::{Probe, STOP_NAMES};
 
     pub struct Prober {
         uia: IUIAutomation,
@@ -175,9 +219,13 @@ mod windows_probe {
                     )
                     .ok()?;
                 let mut names: Option<IUIAutomationCondition> = None;
-                for name in STOP_NAMES {
+                for &name in STOP_NAMES {
                     let c = uia
-                        .CreatePropertyCondition(UIA_NamePropertyId, &VARIANT::from(name))
+                        .CreatePropertyConditionEx(
+                            UIA_NamePropertyId,
+                            &VARIANT::from(name),
+                            PropertyConditionFlags_IgnoreCase,
+                        )
                         .ok()?;
                     names = Some(match names {
                         None => c,
@@ -277,6 +325,16 @@ mod tests {
             .filter_map(|&(p, at)| tracker.update(p, at))
             .map(|w| w.event)
             .collect()
+    }
+
+    #[test]
+    fn stop_names_are_unique_and_non_empty() {
+        let mut seen = std::collections::HashSet::new();
+        for name in STOP_NAMES {
+            assert!(!name.trim().is_empty());
+            assert_eq!(*name, name.trim());
+            assert!(seen.insert(name.to_lowercase()), "duplicate: {name}");
+        }
     }
 
     const ON: Probe = Probe::Running { responding: true };

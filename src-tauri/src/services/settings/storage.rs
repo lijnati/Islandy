@@ -20,10 +20,28 @@ pub const CORRUPT_FILE: &str = "settings.corrupt.json";
 const MAX_FILE_BYTES: u64 = 256 * 1024;
 
 /// One migration step: rewrites a document of version `n` (the index + 1)
-/// into version `n + 1`. Version 1 is the first released format, so the
-/// list is empty for now.
+/// into version `n + 1`.
 type Migration = fn(&mut serde_json::Map<String, Value>);
-pub const MIGRATIONS: &[Migration] = &[];
+pub const MIGRATIONS: &[Migration] = &[v1_to_v2];
+
+/// Version 2 added `onboarding.welcomed`. Anyone with a version 1 file has
+/// already been using Islandy, so they must not get the first-run welcome.
+fn v1_to_v2(doc: &mut serde_json::Map<String, Value>) {
+    let mut onboarding = match doc.remove("onboarding") {
+        Some(Value::Object(map)) => map,
+        _ => serde_json::Map::new(),
+    };
+    onboarding.insert("welcomed".into(), Value::Bool(true));
+    doc.insert("onboarding".into(), Value::Object(onboarding));
+}
+
+/// Defaults for a file that existed but couldn't be used: the person has
+/// been here before, so no welcome.
+fn recovered_defaults() -> Settings {
+    let mut settings = Settings::default();
+    settings.onboarding.welcomed = true;
+    settings
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
@@ -82,7 +100,7 @@ fn load_with(dir: &Path, migrations: &[Migration]) -> Loaded {
     let Some(Value::Object(mut doc)) = doc else {
         move_aside(dir);
         return Loaded {
-            settings: Settings::default(),
+            settings: recovered_defaults(),
             status: LoadStatus::Recovered,
         };
     };
@@ -112,7 +130,7 @@ fn load_with(dir: &Path, migrations: &[Migration]) -> Loaded {
         Err(_) => {
             move_aside(dir);
             Loaded {
-                settings: Settings::default(),
+                settings: recovered_defaults(),
                 status: LoadStatus::Recovered,
             }
         }
@@ -189,7 +207,7 @@ mod tests {
             std::fs::write(path(&dir), content).unwrap();
             let loaded = load(&dir);
             assert_eq!(loaded.status, LoadStatus::Recovered, "{name}");
-            assert_eq!(loaded.settings, Settings::default());
+            assert_eq!(loaded.settings, recovered_defaults());
             assert!(!path(&dir).exists());
             assert_eq!(std::fs::read(dir.join(CORRUPT_FILE)).unwrap(), content);
         }
@@ -208,7 +226,7 @@ mod tests {
         let dir = temp_dir("partial");
         std::fs::write(
             path(&dir),
-            r#"{"version":1,"appearance":{"theme":"graphite","opacity":5},"island":{"anchor":"sideways"}}"#,
+            r#"{"version":2,"appearance":{"theme":"graphite","opacity":5},"island":{"anchor":"sideways"}}"#,
         )
         .unwrap();
         let loaded = load(&dir);
@@ -216,6 +234,40 @@ mod tests {
         assert_eq!(loaded.settings.appearance.theme, Theme::Graphite);
         assert_eq!(loaded.settings.appearance.opacity, 70);
         assert_eq!(loaded.settings.island.anchor, Anchor::TopCenter);
+    }
+
+    #[test]
+    fn upgrading_from_version_1_skips_the_welcome() {
+        // An existing 0.2.x file: version 1, no `onboarding` section.
+        let dir = temp_dir("upgrade");
+        std::fs::write(
+            path(&dir),
+            r#"{"version":1,"appearance":{"theme":"frost"}}"#,
+        )
+        .unwrap();
+        let loaded = load(&dir);
+        assert_eq!(loaded.status, LoadStatus::Migrated { from: 1 });
+        assert!(loaded.settings.onboarding.welcomed);
+        assert_eq!(loaded.settings.appearance.theme, Theme::Frost);
+        // A file without a version is the first format too.
+        std::fs::write(path(&dir), r#"{"island":{"anchor":"topLeft"}}"#).unwrap();
+        let loaded = load(&dir);
+        assert_eq!(loaded.status, LoadStatus::Migrated { from: 1 });
+        assert!(loaded.settings.onboarding.welcomed);
+        // Once saved, a later load keeps it and is no longer a migration.
+        save(&dir, &loaded.settings).unwrap();
+        let again = load(&dir);
+        assert_eq!(again.status, LoadStatus::Loaded);
+        assert!(again.settings.onboarding.welcomed);
+    }
+
+    #[test]
+    fn a_fresh_version_2_file_keeps_the_welcome_pending() {
+        let dir = temp_dir("pending");
+        save(&dir, &Settings::default()).unwrap();
+        let loaded = load(&dir);
+        assert_eq!(loaded.status, LoadStatus::Loaded);
+        assert!(!loaded.settings.onboarding.welcomed);
     }
 
     #[test]
@@ -265,7 +317,7 @@ mod tests {
         let backup = dir.join("settings.v7.backup.json");
         assert_eq!(std::fs::read_to_string(&backup).unwrap(), original);
         save(&dir, &loaded.settings).unwrap();
-        // A second load (now version 1) doesn't touch the backup.
+        // A second load (now the current version) doesn't touch the backup.
         assert_eq!(load(&dir).status, LoadStatus::Loaded);
         assert_eq!(std::fs::read_to_string(&backup).unwrap(), original);
     }

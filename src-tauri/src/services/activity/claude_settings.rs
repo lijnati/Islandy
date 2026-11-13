@@ -16,7 +16,10 @@
 //!
 //! Handlers use the exec form (`command` + `args`, no shell), so paths with
 //! spaces need no quoting under Git Bash or PowerShell, and `async: true` so
-//! Claude Code never waits for Islandy.
+//! Claude Code never waits for Islandy — except `PermissionRequest`, which
+//! runs synchronously so an answer given on the island can reach Claude
+//! Code. It returns at once unless "Answer permission requests" is on, and
+//! then waits at most `protocol::ANSWER_WAIT`.
 
 use std::path::{Path, PathBuf};
 
@@ -31,6 +34,8 @@ const BACKUP_PREFIX: &str = "settings.islandy-backup-";
 const KEEP_BACKUPS: usize = 5;
 /// Seconds; only meaningful if a Claude Code version ignores `async`.
 const HOOK_TIMEOUT_SECS: u64 = 10;
+/// Above `protocol::ANSWER_WAIT` (30 s), so the bridge always gives up first.
+const PERMISSION_TIMEOUT_SECS: u64 = 45;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -127,7 +132,15 @@ pub fn hook_command(exe: &Path) -> String {
 /* Pure JSON edits                                                            */
 /* -------------------------------------------------------------------------- */
 
-fn handler(command: &str) -> Value {
+fn handler(command: &str, hook: ClaudeHook) -> Value {
+    if hook == ClaudeHook::PermissionRequest {
+        return json!({
+            "type": "command",
+            "command": command,
+            "args": ["hook"],
+            "timeout": PERMISSION_TIMEOUT_SECS,
+        });
+    }
     json!({
         "type": "command",
         "command": command,
@@ -137,8 +150,8 @@ fn handler(command: &str) -> Value {
     })
 }
 
-fn group(command: &str) -> Value {
-    json!({ "hooks": [handler(command)] })
+fn group(command: &str, hook: ClaudeHook) -> Value {
+    json!({ "hooks": [handler(command, hook)] })
 }
 
 /// Whether a handler object is one Islandy installed.
@@ -166,7 +179,7 @@ pub fn is_managed(handler: &Value) -> bool {
 pub fn snippet(command: &str) -> String {
     let mut hooks = Map::new();
     for hook in ClaudeHook::ALL {
-        hooks.insert(hook.name().to_owned(), json!([group(command)]));
+        hooks.insert(hook.name().to_owned(), json!([group(command, hook)]));
     }
     serde_json::to_string_pretty(&json!({ "hooks": hooks })).unwrap_or_default()
 }
@@ -226,7 +239,7 @@ pub fn apply_install(mut root: Value, command: &str) -> Result<Value, Integratio
             .or_insert_with(|| Value::Array(Vec::new()))
             .as_array_mut()
             .ok_or(IntegrationError::Malformed)?;
-        let wanted = group(command);
+        let wanted = group(command, hook);
         let current = groups.iter().filter(|g| contains_managed(g)).count();
         if current == 1 && groups.contains(&wanted) {
             continue; // already exactly right: leave the array untouched
@@ -292,7 +305,7 @@ pub fn inspect(root: &Value, command: &str) -> IntegrationState {
             .filter(|h| is_managed(h))
             .collect();
         any += usize::from(!managed.is_empty());
-        exact += usize::from(managed.len() == 1 && *managed[0] == handler(command));
+        exact += usize::from(managed.len() == 1 && *managed[0] == handler(command, hook));
     }
     match (any, exact) {
         (0, _) => IntegrationState::NotInstalled,
@@ -551,9 +564,10 @@ mod tests {
             assert!(!is_managed(&handler), "{handler}");
         }
         assert!(is_managed(&handler(
-            r"C:\Program Files\Islandy\Islandy.exe"
+            r"C:\Program Files\Islandy\Islandy.exe",
+            ClaudeHook::Stop
         )));
-        assert!(is_managed(&handler("/usr/bin/islandy")));
+        assert!(is_managed(&handler("/usr/bin/islandy", ClaudeHook::Stop)));
     }
 
     #[test]
@@ -695,5 +709,21 @@ mod tests {
         }
         assert_eq!(backups(&loc.dir).len(), KEEP_BACKUPS);
         std::fs::remove_dir_all(&loc.dir).unwrap();
+    }
+
+    #[test]
+    fn only_the_permission_hook_waits() {
+        let root = apply_install(json!({}), CMD).unwrap();
+        let permission = &root["hooks"]["PermissionRequest"][0]["hooks"][0];
+        assert!(permission.get("async").is_none());
+        assert_eq!(permission["timeout"], PERMISSION_TIMEOUT_SECS);
+        assert!(PERMISSION_TIMEOUT_SECS > super::super::protocol::ANSWER_WAIT.as_secs());
+        assert_eq!(root["hooks"]["Stop"][0]["hooks"][0]["async"], true);
+        assert_eq!(inspect(&root, CMD), IntegrationState::Installed);
+        // A 0.2 install (all async) needs an update.
+        let mut old = root.clone();
+        old["hooks"]["PermissionRequest"][0]["hooks"][0]["async"] = json!(true);
+        old["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"] = json!(HOOK_TIMEOUT_SECS);
+        assert_eq!(inspect(&old, CMD), IntegrationState::NeedsUpdate);
     }
 }

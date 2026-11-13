@@ -201,6 +201,23 @@ export function AboutPage() {
 
       <UpdatesSection />
 
+      <Section title="Getting started">
+        <Row
+          label="Welcome"
+          description="Revisit the short introduction: Claude Code hooks, the weather and the keyboard shortcut."
+          control={
+            <Button
+              onClick={() => {
+                // SettingsApp follows the hash.
+                window.location.hash = "#welcome";
+              }}
+            >
+              Show welcome
+            </Button>
+          }
+        />
+      </Section>
+
       <p className="px-1 text-caption text-fg-subtle">
         Islandy is an independent project inspired by the Dynamic Island idea. It is not affiliated
         with or endorsed by Apple Inc. or Microsoft.

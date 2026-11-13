@@ -25,9 +25,10 @@ import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { IslandPage } from "./pages/IslandPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
+import { WelcomePage } from "./pages/WelcomePage";
 import { WidgetsPage } from "./pages/WidgetsPage";
 
-const ICONS: Record<SettingsPageId, LucideIcon> = {
+const ICONS: Record<Exclude<SettingsPageId, "welcome">, LucideIcon> = {
   general: SlidersHorizontal,
   appearance: Palette,
   island: PanelTop,
@@ -38,7 +39,7 @@ const ICONS: Record<SettingsPageId, LucideIcon> = {
   about: Info,
 };
 
-const PAGES: Record<SettingsPageId, () => React.JSX.Element> = {
+const PAGES: Record<Exclude<SettingsPageId, "welcome">, () => React.JSX.Element> = {
   general: GeneralPage,
   appearance: AppearancePage,
   island: IslandPage,
@@ -102,7 +103,7 @@ export function SettingsApp() {
     if (window.location.hash !== `#${page}`) history.replaceState(null, "", `#${page}`);
   }, [page]);
 
-  const Page = PAGES[page];
+  const Page = page === "welcome" ? null : PAGES[page];
   return (
     <div className="flex h-full bg-settings text-fg">
       <nav
@@ -150,7 +151,7 @@ export function SettingsApp() {
       <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-[680px] flex-col gap-4 px-10 py-8">
           <StatusBanner />
-          <Page />
+          {Page ? <Page /> : <WelcomePage onNavigate={setPage} />}
         </div>
       </main>
     </div>
