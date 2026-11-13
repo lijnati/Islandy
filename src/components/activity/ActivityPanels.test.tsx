@@ -322,7 +322,34 @@ describe("Claude mark in the resting pill", () => {
     expect(glyph?.getAttribute("data-state")).toBe("idle");
     expect(glyph?.getAttribute("class")).toContain("text-claude");
     expect(glyph?.getAttribute("class")).toContain("animate-glyph-idle");
-    expect(glyph?.previousElementSibling?.querySelector("time")).toBeTruthy();
+    const markEl = glyph?.closest("[data-claude-mark]");
+    expect(markEl?.previousElementSibling?.querySelector("time")).toBeTruthy();
+  });
+
+  it("opens the Claude status panel when the logo is clicked", () => {
+    load(snapshot({ sessions: [session()] }));
+    act(() => {
+      islandStore.setState({ mode: "collapsed", activeWidget: null, pinned: false });
+    });
+    render(<CollapsedIsland />);
+    // A working session shows the ambient view; its glyph is the logo.
+    const markEl = document.querySelector("[data-claude-mark]");
+    expect(markEl).toBeTruthy();
+    fireEvent.click(markEl as Element);
+    const state = islandStore.getState();
+    expect(state.mode).toBe("focused");
+    expect(state.activeWidget).toBe("claude");
+  });
+
+  it("opens the plain dashboard when the rest of the pill is clicked", () => {
+    load(snapshot({ sessions: [] }));
+    render(<CollapsedIsland />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Claude idle/ }).querySelector("time") as Element,
+    );
+    const state = islandStore.getState();
+    expect(state.mode).toBe("expanded");
+    expect(state.activeWidget).toBeNull();
   });
 
   it("is hidden with the Claude source off", () => {

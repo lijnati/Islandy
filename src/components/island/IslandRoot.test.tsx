@@ -135,7 +135,9 @@ describe("IslandRoot (browser mode, no native shell)", () => {
     );
     render(<IslandRoot />);
     expect(
-      screen.getByRole("button", { name: /playing Ünïcode Song by Band\. Open dashboard/ }),
+      screen.getByRole("button", {
+        name: /playing Ünïcode Song by Band\. Claude idle\. Open dashboard/,
+      }),
     ).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: /Open dashboard/ }));
     await settle();

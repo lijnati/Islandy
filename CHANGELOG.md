@@ -11,6 +11,8 @@ All notable changes to Islandy. The format follows
 - The resting island shows Claude's orange mark between the clock and the playback bars. It
   breathes slowly at rest, turns while Claude works and pulses amber when Claude needs you
   (still with reduced motion; hidden when the Claude source is off).
+- Clicking the Claude logo on the island opens the Claude status panel directly (sessions,
+  permission requests and the usage glance); the rest of the pill still opens the dashboard.
 
 ## [0.3.0] — 2026-11-13
 

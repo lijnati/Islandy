@@ -1,4 +1,5 @@
 import { Moon, Sparkle } from "lucide-react";
+import type { ReactNode } from "react";
 
 import {
   ambientLabel,
@@ -7,6 +8,7 @@ import {
   type Ambient,
 } from "../../features/activity/activity-model";
 import { useActivity } from "../../features/activity/activity-store";
+import { openClaudeSession } from "../../features/activity/navigation";
 import { useAmbient, useQuiet } from "../../features/activity/use-ambient";
 import { dispatchIsland } from "../../features/island/island-store";
 import { useDragReposition } from "../../features/island/use-drag-reposition";
@@ -38,7 +40,9 @@ function AmbientContent({ ambient }: { ambient: Ambient }) {
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2">
       {ambient.kind === "claude" ? (
-        <ClaudeGlyph state={attention ? "attention" : "working"} size={14} />
+        <ClaudeMark>
+          <ClaudeGlyph state={attention ? "attention" : "working"} size={14} />
+        </ClaudeMark>
       ) : (
         TaskIcon && (
           <TaskIcon size={13} strokeWidth={2} aria-hidden="true" className="shrink-0 text-fg" />
@@ -59,6 +63,27 @@ function AmbientContent({ ambient }: { ambient: Ambient }) {
     </span>
   );
 }
+
+/** Marks the Claude logo: a click on it opens the Claude status panel. */
+const CLAUDE_MARK = "data-claude-mark";
+
+function ClaudeMark({ children }: { children: ReactNode }) {
+  return (
+    <span
+      {...{ [CLAUDE_MARK]: "" }}
+      title="Claude status"
+      className="-m-1 flex shrink-0 cursor-pointer items-center justify-center rounded-full p-1 transition-[background-color,transform] duration-fast hover:scale-110 hover:bg-surface-hover active:scale-95"
+    >
+      {children}
+    </span>
+  );
+}
+
+const STATE_SPEECH: Record<GlyphState, string> = {
+  idle: "Claude idle",
+  working: "Claude working",
+  attention: "Claude needs attention",
+};
 
 /** Claude's overall state for the resting pill, or `null` with the Claude source off. */
 function useClaudeState(): GlyphState | null {
@@ -105,9 +130,10 @@ export function CollapsedIsland() {
   const mediaLabel = media
     ? `, ${playing ? "playing" : "paused"} ${displayTitle(media)}${media.artist ? ` by ${media.artist}` : ""}`
     : "";
+  const claudeLabel = claude ? `. ${STATE_SPEECH[claude]}` : "";
   const label = ambient
     ? `Islandy, ${time}. ${ambientSpeech(ambient)}${quiet ? ". Quiet mode on" : ""}. Open dashboard`
-    : `Islandy, ${time}${mediaLabel}${quiet ? ". Quiet mode on" : ""}. Open dashboard`;
+    : `Islandy, ${time}${mediaLabel}${claudeLabel}${quiet ? ". Quiet mode on" : ""}. Open dashboard`;
 
   const timeEl = (
     <time
@@ -121,9 +147,13 @@ export function CollapsedIsland() {
   return (
     <button
       type="button"
-      onClick={() => {
+      onClick={(e) => {
         if (consumeDragClick()) return;
         dispatchIsland({ type: "PRESS" });
+        // A click on the Claude logo goes straight to the Claude status panel.
+        if (e.target instanceof Element && e.target.closest(`[${CLAUDE_MARK}]`)) {
+          openClaudeSession(null);
+        }
       }}
       {...handlers}
       aria-label={label}
@@ -166,7 +196,11 @@ export function CollapsedIsland() {
             {quiet && media && <QuietMark />}
             {timeEl}
           </span>
-          {claude && <ClaudeGlyph state={claude} size={15} brand />}
+          {claude && (
+            <ClaudeMark>
+              <ClaudeGlyph state={claude} size={15} brand />
+            </ClaudeMark>
+          )}
           <ActivityBars active={playing} />
         </>
       )}
