@@ -139,7 +139,7 @@ const hoursMinutes = (ms: number) => {
 };
 
 /** Last 24 hours of Claude activity, from hook timing only. */
-export function UsageGlance({ usage }: { usage: ClaudeUsage }) {
+export function UsageGlance({ usage, className }: { usage: ClaudeUsage; className?: string }) {
   if (usage.turns === 0 && usage.neededYou === 0) return null;
   const turns = usage.turns === 1 ? "1 turn" : `${usage.turns} turns`;
   const needed =
@@ -148,10 +148,10 @@ export function UsageGlance({ usage }: { usage: ClaudeUsage }) {
       : usage.neededYou === 1
         ? "needed you once"
         : `needed you ${usage.neededYou}×`;
+  const text = `${usage.partial ? "Since Islandy started" : "Last 24 hours"}: ${turns} · ${hoursMinutes(usage.workedMs)} working · ${needed}`;
   return (
-    <p className="text-caption text-fg-muted tabular-nums">
-      {usage.partial ? "Since Islandy started" : "Last 24 hours"}: {turns} ·{" "}
-      {hoursMinutes(usage.workedMs)} working · {needed}
+    <p title={text} className={cx("truncate text-caption text-fg-muted tabular-nums", className)}>
+      {text}
     </p>
   );
 }
@@ -191,7 +191,15 @@ function SessionList({ sessions, selected }: { sessions: ClaudeSession[]; select
   );
 }
 
-function SessionDetail({ session, now: minuteNow }: { session: ClaudeSession; now: number }) {
+function SessionDetail({
+  session,
+  usage,
+  now: minuteNow,
+}: {
+  session: ClaudeSession;
+  usage: ClaudeUsage | undefined;
+  now: number;
+}) {
   const events = useActivity((s) => s.snapshot?.events);
   const since = elapsedSince(session);
   const activity = lastActivityLabel(session);
@@ -213,6 +221,8 @@ function SessionDetail({ session, now: minuteNow }: { session: ClaudeSession; no
           tone={sessionTone(session)}
           label={sessionStatusLabel(session)}
         />
+        {/* Day totals sit in the header so the panel never outgrows its tile. */}
+        {usage && <UsageGlance usage={usage} className="ml-auto min-w-0 pl-3" />}
       </div>
 
       {session.question ? (
@@ -340,9 +350,8 @@ export function ClaudePanel() {
           <SessionList sessions={sessions} selected={selected.id} />
         </div>
       )}
-      <div className="flex min-w-0 flex-1 flex-col gap-2 rounded-tile border border-hairline bg-surface-secondary p-3 shadow-surface">
-        <SessionDetail session={selected} now={now} />
-        {usage && <UsageGlance usage={usage} />}
+      <div className="flex min-w-0 flex-1 rounded-tile border border-hairline bg-surface-secondary p-3 shadow-surface">
+        <SessionDetail session={selected} usage={usage} now={now} />
       </div>
     </div>
   );

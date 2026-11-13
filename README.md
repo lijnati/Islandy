@@ -22,6 +22,10 @@ the top of the screen. It's local, private and light on resources.
 
 <br />
 
+<img src="docs/images/v0.3/island-claude.png" width="416" alt="The Islandy pill in three states: album art, the time, Claude's orange logo and music bars; a Claude Code session working; and the session needing attention" />
+
+<br />
+
 <img src="docs/images/v0.2/dashboard-weather.png" width="830" alt="The Islandy dashboard: Now Playing, a month calendar and the weather in Tokyo" />
 
 </div>
@@ -35,6 +39,16 @@ island that stays out of the way. Hover it and it expands into a dashboard. When
 matters it peeks for a moment: a track change, a finished build, Claude Code waiting for you, a
 low battery. It feels like part of the OS. It has no taskbar button, never steals focus, and
 uses almost nothing when idle.
+
+## Claude on the island
+
+Claude's orange logo sits on the island between the clock and the music. It breathes slowly
+while Claude is idle, turns while Claude Code (or Claude Desktop) works, and pulses amber when
+Claude needs you. Click it to open the Claude panel: every session's status, permission
+requests you can answer with **Allow once** / **Deny** (opt-in), and how your last 24 hours with
+Claude went.
+
+<img src="docs/images/v0.3/claude-panel.png" width="820" alt="The Claude panel: a session named islandy needs attention; Claude wants to run pnpm test, with Allow once, Deny and Answer in Claude Code; last 24 hours: 18 turns, 2h 14m working, needed you 5 times" />
 
 ## Features
 

@@ -13,6 +13,8 @@ All notable changes to Islandy. The format follows
   (still with reduced motion; hidden when the Claude source is off).
 - Clicking the Claude logo on the island opens the Claude status panel directly (sessions,
   permission requests and the usage glance); the rest of the pill still opens the dashboard.
+- The Claude panel's 24-hour totals moved into the panel header (they overflowed the panel while
+  a permission request was open). README screenshots show the Claude logo on the island.
 
 ### Fixed
 
