@@ -1,7 +1,7 @@
 # Privacy
 
 Islandy is local software. It has no account, no analytics, no telemetry and no cloud service.
-This page lists what it reads, keeps and sends. It covers Phases 0–4.
+This page lists what it reads, keeps and sends.
 
 ## Never collected
 
@@ -38,8 +38,23 @@ timestamped backup (`settings.islandy-backup-*.json`, newest 5) is kept next to 
 ## Network
 
 The only listener is the local receiver on `127.0.0.1`, reachable only from this machine and
-only with the token. Islandy makes no network requests of its own. Network status comes from
-Windows. (The installer may download WebView2 if it's missing; that's Microsoft's bootstrapper.)
+only with the token. Network status comes from Windows. (The installer may download WebView2 if
+it's missing; that's Microsoft's bootstrapper.)
+
+Islandy itself makes exactly two kinds of outgoing requests, both HTTPS, both without cookies,
+accounts, identifiers or analytics. The user agent is `Islandy/<version>`.
+
+| Request         | To                                                       | Sends                                                                   | When                                                                                           | Turn off                                                               |
+| --------------- | -------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Update check    | `github.com` (the project's `latest.json` release asset) | Nothing beyond the request itself                                       | 45 s after start, then every 6 h; or **Check now**                                             | Settings › About › Check for updates automatically                     |
+| Update download | `github.com` release assets                              | Nothing                                                                 | When an update is found and automatic installation is on, or on **Restart to update**          | Settings › About › Install updates automatically                       |
+| Weather         | `api.open-meteo.com`                                     | The chosen place's coordinates rounded to 2 decimals (≈ 1 km), the unit | Only after you choose a place, only while the dashboard shows the widget, at most every 30 min | Remove the place (Settings › Widgets › Weather) or turn the widget off |
+| Place search    | `geocoding-api.open-meteo.com`                           | The place name you typed                                                | Only when you press **Search**                                                                 | —                                                                      |
+
+Your IP address is visible to GitHub and Open-Meteo, as with any web request. Islandy never asks
+Windows for your location and never derives one from your IP address. Forecasts are kept in
+memory only; update downloads are kept in memory until installed and verified against the
+signing key built into Islandy before anything runs.
 
 ## Your controls
 

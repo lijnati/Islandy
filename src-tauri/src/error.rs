@@ -27,6 +27,9 @@ pub enum IslandyError {
     /// The shortcut is invalid or couldn't be registered (user-facing text).
     #[error("{0}")]
     Shortcut(String),
+    /// A network request failed (user-facing text, no URLs or secrets).
+    #[error("{0}")]
+    Network(String),
     #[error(transparent)]
     Tauri(#[from] tauri::Error),
 }
@@ -43,6 +46,7 @@ impl IslandyError {
             Self::System(e) => e.kind(),
             Self::Integration(e) => e.kind(),
             Self::Shortcut(_) => "shortcut",
+            Self::Network(_) => "network",
             Self::Tauri(_) => "internal",
         }
     }

@@ -1,7 +1,8 @@
 # Installing Islandy
 
-Islandy 0.1.0 is distributed as a per-user NSIS installer
-(`Islandy_0.1.0_x64-setup.exe`). It needs no administrator rights.
+Islandy is distributed as a per-user NSIS installer
+(`Islandy_<version>_x64-setup.exe`) from
+[GitHub Releases](https://github.com/lijnati/Islandy/releases). It needs no administrator rights.
 
 > **Release-candidate status.** The installer is built from this repository with Tauri's
 > bundler. Installing and uninstalling were exercised under Wine on Linux (files, shortcuts,
@@ -16,7 +17,7 @@ Islandy 0.1.0 is distributed as a per-user NSIS installer
 
 ## Install
 
-1. Run `Islandy_0.1.0_x64-setup.exe`.
+1. Download `Islandy_<version>_x64-setup.exe` from the latest release and run it.
 2. **SmartScreen:** this build is not code-signed, so Windows may show "Windows protected your
    PC". Choose **More info → Run anyway** only if you obtained the installer from a source you
    trust. Signed builds are planned (see [release.md](release.md)).
@@ -47,8 +48,16 @@ open it from the tray or with the shortcut.
 
 ## Update
 
-Automatic updates are not enabled in 0.1.0. To update, run the newer installer: it replaces
-the program files and keeps your settings, history and startup choice.
+From 0.2.0 on, Islandy updates itself. It checks this project's GitHub Releases shortly after it
+starts and then every 6 hours, downloads a newer version in the background, verifies its
+signature, and installs it while you're away from the PC (a small progress bar appears for a few
+seconds and Islandy restarts). You can also install at once from the tray (**Restart to update**)
+or **Settings › About**. Both switches (checking, and installing automatically) are in
+**Settings › About**.
+
+Versions before 0.2.0 (the 0.1.0 release candidate) can't update themselves: install 0.2.0 once
+over them. Running a newer installer by hand always works too; it keeps your settings, history
+and startup choice.
 
 ## Uninstall
 

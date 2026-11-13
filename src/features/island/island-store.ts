@@ -40,7 +40,8 @@ export type PeekIcon =
   | "build"
   | "tests"
   | "server"
-  | "message";
+  | "message"
+  | "update";
 
 /**
  * - `working`: amber (system/legacy "in progress")

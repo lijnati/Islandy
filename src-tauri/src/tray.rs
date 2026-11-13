@@ -3,7 +3,7 @@
 //!
 //! - Left click: show the island (if hidden) and open the dashboard.
 //! - Right click: the menu (Show/Hide, Settings, Quiet mode, Launch at
-//!   startup, About, Quit).
+//!   startup, About, Check for updates / Restart to update, Quit).
 //!
 //! One icon per process, created once in `setup` (single-instance makes it
 //! one per user session). The `tray-icon` crate re-adds it when Explorer
@@ -19,7 +19,9 @@ use tauri::{
 use crate::{
     services::{
         activity::{ActivityCommand, ActivityService},
+        settings::SettingsService,
         startup,
+        updates::{UpdatePhase, UpdateService, UpdateStatus},
     },
     settings_window::{self, SettingsPage},
     window::IslandWindow,
@@ -32,6 +34,7 @@ pub struct TrayMenu<R: Runtime> {
     visibility: MenuItem<R>,
     quiet: CheckMenuItem<R>,
     startup: CheckMenuItem<R>,
+    update: MenuItem<R>,
 }
 
 /// Menu entries, in order (pure, so the structure is unit-tested).
@@ -43,8 +46,22 @@ pub const ITEMS: &[(&str, &str)] = &[
     ("startup", "Launch at startup"),
     ("-", ""),
     ("about", "About Islandy"),
+    ("update", "Check for updates"),
     ("quit", "Quit Islandy"),
 ];
+
+/// The update entry's text, and whether it can be clicked.
+pub fn update_label(status: &UpdateStatus) -> (String, bool) {
+    let version = status.version.as_deref().unwrap_or("");
+    match status.phase {
+        UpdatePhase::Ready => (format!("Restart to update to {version}"), true),
+        UpdatePhase::Available => (format!("Install update {version}"), true),
+        UpdatePhase::Downloading => ("Downloading update…".into(), false),
+        UpdatePhase::Checking => ("Checking for updates…".into(), false),
+        UpdatePhase::Installing => ("Installing update…".into(), false),
+        _ => ("Check for updates".into(), true),
+    }
+}
 
 pub fn visibility_label(visible: bool) -> &'static str {
     if visible {
@@ -61,7 +78,8 @@ pub fn setup<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
     let startup_item =
         CheckMenuItem::with_id(app, "startup", ITEMS[4].1, true, false, None::<&str>)?;
     let about = MenuItem::with_id(app, "about", ITEMS[6].1, true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", ITEMS[7].1, true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", ITEMS[7].1, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", ITEMS[8].1, true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[
@@ -72,6 +90,7 @@ pub fn setup<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
             &startup_item,
             &PredefinedMenuItem::separator(app)?,
             &about,
+            &update,
             &quit,
         ],
     )?;
@@ -79,6 +98,7 @@ pub fn setup<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         visibility,
         quiet,
         startup: startup_item,
+        update,
     });
 
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
@@ -126,6 +146,34 @@ fn on_menu<R: Runtime>(app: &AppHandle<R>, id: &str) {
             }
             sync(app);
         }
+        "update" => {
+            let ready = app.try_state::<UpdateService>().is_some_and(|u| {
+                matches!(
+                    u.status().phase,
+                    UpdatePhase::Ready | UpdatePhase::Available
+                )
+            });
+            let app = app.clone();
+            if !ready {
+                // Show the outcome where it is explained.
+                open_settings(&app, SettingsPage::About);
+            }
+            tauri::async_runtime::spawn(async move {
+                let Some(updates) = app.try_state::<UpdateService>() else {
+                    return;
+                };
+                if ready {
+                    updates.install(&app).await;
+                } else {
+                    let download = app
+                        .try_state::<SettingsService>()
+                        .is_some_and(|s| s.get().updates.auto_install);
+                    sync_update(&app);
+                    updates.check(&app, download).await;
+                }
+                sync_update(&app);
+            });
+        }
         "quit" => {
             crate::log_info!("app", "quit from the tray");
             app.exit(0);
@@ -157,6 +205,20 @@ pub fn sync<R: Runtime>(app: &AppHandle<R>) {
     let status = startup::status();
     let _ = menu.startup.set_enabled(status.supported);
     let _ = menu.startup.set_checked(status.enabled);
+    sync_update(app);
+}
+
+/// Refreshes the update entry (called when the update state changes).
+pub fn sync_update<R: Runtime>(app: &AppHandle<R>) {
+    let (Some(menu), Some(updates)) = (
+        app.try_state::<TrayMenu<R>>(),
+        app.try_state::<UpdateService>(),
+    ) else {
+        return;
+    };
+    let (text, enabled) = update_label(&updates.status());
+    let _ = menu.update.set_text(text);
+    let _ = menu.update.set_enabled(enabled);
 }
 
 #[cfg(test)]
@@ -178,6 +240,7 @@ mod tests {
                 "quiet",
                 "startup",
                 "about",
+                "update",
                 "quit"
             ]
         );

@@ -8,5 +8,7 @@ pub mod paths;
 pub mod settings;
 pub mod startup;
 pub mod system;
+pub mod updates;
+pub mod weather;
 #[cfg(windows)]
 pub mod winrt;

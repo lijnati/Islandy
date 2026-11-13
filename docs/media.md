@@ -219,7 +219,7 @@ selectedSessionId: "s1", selectionMode: "auto" })`.
 
 - **Not yet verified on Windows at runtime.** The backend compiles and passes clippy for
   `x86_64-pc-windows-msvc`, a Windows build cross-compiles, and all platform-independent logic
-  is tested, but no real media session has been exercised (see the README checklist).
+  is tested, but no real media session has been exercised (see docs/windows-verification.md).
 - Behavior with specific apps (timeline update frequency, artwork timing, AUMIDs) is unknown
   until tested; app names for unpackaged apps come from a heuristic on the AUMID ("Spotify.exe"
   → "Spotify"; opaque hash ids → "Media app").

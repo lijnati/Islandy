@@ -115,7 +115,7 @@ registry edits, no undocumented interfaces.
   - `local`: connected, but no internet.
   - `none`: not connected.
 - An associated adapter is never treated as internet access, and Islandy makes no network
-  requests of its own.
+  requests to test connectivity.
 - The connection type (Wi-Fi / Ethernet / cellular / other) comes from the profile flags and
   the adapter's IANA type. The network name is the profile name, if Windows provides it; it
   is never guessed.

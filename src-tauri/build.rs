@@ -49,6 +49,11 @@ fn main() {
             "open_islandy_folder",
             "get_storage_info",
             "get_diagnostics",
+            "get_weather",
+            "search_weather_places",
+            "get_update_status",
+            "check_for_updates",
+            "install_update",
         ]),
     ))
     .expect("failed to run tauri-build");

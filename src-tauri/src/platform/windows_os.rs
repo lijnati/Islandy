@@ -2,7 +2,8 @@
 //! - launch at sign-in (the per-user `Run` key; no admin rights),
 //! - the Windows version (registry, because `GetVersionEx` lies),
 //! - fullscreen detection for the island's monitor,
-//! - opening Islandy's own folders in File Explorer.
+//! - opening Islandy's own folders in File Explorer,
+//! - how long the user has been idle (updates install while away).
 
 use std::path::Path;
 
@@ -15,7 +16,9 @@ use windows::{
             HKEY_LOCAL_MACHINE, REG_BINARY, REG_SZ, RRF_RT_REG_BINARY, RRF_RT_REG_DWORD,
             RRF_RT_REG_SZ,
         },
+        System::SystemInformation::GetTickCount,
         UI::{
+            Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO},
             Shell::ShellExecuteW,
             WindowsAndMessaging::{
                 GetClassNameW, GetForegroundWindow, GetWindowRect, IsIconic, IsZoomed,
@@ -252,4 +255,22 @@ pub fn open_folder(path: &Path) -> Result<()> {
             result.0 as isize
         )))
     }
+}
+
+/// Time since the last keyboard or mouse input in this session.
+pub fn user_idle_for() -> Option<std::time::Duration> {
+    let mut info = LASTINPUTINFO {
+        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    // SAFETY: `info` is a valid, initialized LASTINPUTINFO with cbSize set.
+    if !unsafe { GetLastInputInfo(&mut info) }.as_bool() {
+        return None;
+    }
+    // SAFETY: no preconditions. Both tick counts wrap every ~49.7 days;
+    // wrapping subtraction handles that.
+    let now = unsafe { GetTickCount() };
+    Some(std::time::Duration::from_millis(u64::from(
+        now.wrapping_sub(info.dwTime),
+    )))
 }

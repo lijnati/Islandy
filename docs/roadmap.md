@@ -151,13 +151,22 @@ process monitoring.
 **Verified:** automated tests; the real app on Linux (settings window, single instance, startup
 entry, persistence, placement, hooks install/remove, test event); the Windows installer and
 uninstaller under Wine (files, shortcuts, HKCU keys, Run cleanup, hook cleanup, update mode).
-**Exit gate still open:** the README Windows checklist (all phases) on Windows 10 and 11.
+**Exit gate still open:** the [Windows checklist](windows-verification.md) (all phases) on Windows 10 and 11.
 
-**Not done, by decision:** quiet-mode scheduling, automatic updates (no endpoint/signing key),
-code signing, native acrylic blur, MSIX, ICS calendars, a screen-reader audit.
+**Not done, by decision:** quiet-mode scheduling, code signing, native acrylic blur, MSIX, ICS
+calendars, a screen-reader audit.
+
+## 0.2.0 — Updates and weather
+
+- Automatic updates from GitHub Releases: signed (minisign) installers, background check every
+  6 hours, background download, install while the user is away, "Restart to update" in the tray
+  and Settings › About; both switches user-controlled.
+- Weather widget (Open-Meteo, no account): current conditions, feels-like, humidity, wind and a
+  three-day outlook for a place chosen in Settings; °C/°F; on-demand requests only.
+- Settings window opens reliably on Windows (window creation moved off the main thread).
 
 ## Later
 
-- Code signing and a signed updater; MSIX evaluation.
+- Code signing; MSIX evaluation.
 - Quiet-mode schedule; screen-reader accessibility audit; ICS calendar subscription.
 - Event-driven fullscreen detection; handling `WM_ENDSESSION` to flush history.

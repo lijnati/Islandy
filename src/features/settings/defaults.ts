@@ -45,8 +45,11 @@ export const DEFAULT_SETTINGS: Settings = {
       { id: "activity", enabled: true },
       { id: "system", enabled: false },
       { id: "audio", enabled: false },
+      { id: "weather", enabled: false },
     ],
   },
+  weather: { location: null, unit: "celsius" },
+  updates: { autoCheck: true, autoInstall: true },
 };
 
 /** Mirrors `ActivitySettings::default()` in `services/activity/model.rs`. */

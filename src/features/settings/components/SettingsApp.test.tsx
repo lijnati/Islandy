@@ -71,7 +71,14 @@ describe("SettingsApp (browser mode)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Move Activity up" }));
     fireEvent.click(screen.getByRole("switch", { name: "Show Sound" }));
     let items = settingsStore.getState().state.settings.widgets.items;
-    expect(items.map((w) => w.id)).toEqual(["media", "activity", "calendar", "system", "audio"]);
+    expect(items.map((w) => w.id)).toEqual([
+      "media",
+      "activity",
+      "calendar",
+      "system",
+      "audio",
+      "weather",
+    ]);
     expect(items.find((w) => w.id === "audio")?.enabled).toBe(true);
     // Four widgets don't fit: the last enabled one is flagged.
     expect(screen.getByText("Doesn't fit")).toBeTruthy();

@@ -6,12 +6,12 @@ opened and destroyed when closed, so it costs nothing while you don't use it.
 
 ## Storage and format
 
-| What                                     | Where (`%LOCALAPPDATA%\com.islandy.desktop\`)  | Owner                 |
-| ---------------------------------------- | ---------------------------------------------- | --------------------- |
-| Appearance, island, interaction, widgets | `settings.json`                                | `services/settings/`  |
-| Notifications, quiet mode, sources       | `activity.json` (with the activity history)    | `services/activity/`  |
-| Launch at startup                        | Windows' `Run` key (read live, never cached)   | `services/startup.rs` |
-| Toggle shortcut                          | `settings.json`, after successful registration | `shortcut.rs`         |
+| What                                                                     | Where (`%LOCALAPPDATA%\com.islandy.desktop\`)  | Owner                 |
+| ------------------------------------------------------------------------ | ---------------------------------------------- | --------------------- |
+| Appearance, island, interaction, widgets, weather place, update switches | `settings.json`                                | `services/settings/`  |
+| Notifications, quiet mode, sources                                       | `activity.json` (with the activity history)    | `services/activity/`  |
+| Launch at startup                                                        | Windows' `Run` key (read live, never cached)   | `services/startup.rs` |
+| Toggle shortcut                                                          | `settings.json`, after successful registration | `shortcut.rs`         |
 
 - **Typed and versioned.** `settings.json` carries `"version": 1`. The schema is
   `src-tauri/src/services/settings/models.rs`, mirrored by
@@ -89,6 +89,12 @@ network, Bluetooth) and Sound (output, volume, mute). The dashboard shows the tu
 order and keeps those that fit its width; the list marks the ones that don't. **Restore default
 layout** brings back media, calendar and activity. There is no third-party widget support.
 
+**Weather** (off by default, because the three default widgets already fill the dashboard): pick
+a place with the search below the list (Open-Meteo's place search), and °C or °F. The widget
+shows the temperature, conditions, today's high and low, feels-like, humidity, wind and the next
+three days. Choosing a place turns the widget on; put it before another widget or turn one off
+so it fits. Without a place nothing is requested. See [privacy.md](privacy.md#network).
+
 ### Integrations
 
 Claude Code (status, settings path, last event, install/reinstall/remove with confirmation,
@@ -111,7 +117,15 @@ data and log folders, detailed logging, and **Copy diagnostic summary**.
 
 ### About
 
-Version, runtime (Tauri, WebView), update policy, and a non-affiliation note.
+Version, runtime (Tauri, WebView), a non-affiliation note, and **Updates**:
+
+- status (up to date, available, downloading with progress, ready, failed) with **Check now** or
+  **Restart to update**, and the release notes of a found version;
+- **Check for updates automatically** (on): 45 s after start, then every 6 hours;
+- **Install updates automatically** (on): download in the background and install once you've
+  been away for 4 minutes. Off: Islandy shows a peek and a tray entry and waits for you.
+
+How releases are signed and published: [release.md](release.md#automatic-updates).
 
 ## Environment variables
 

@@ -21,6 +21,7 @@ import type {
   MediaSnapshot,
   MonitorInfo,
   NativeErrorKind,
+  PlaceResult,
   NativeErrorPayload,
   RadioKind,
   Settings,
@@ -35,6 +36,8 @@ import type {
   SystemFocus,
   SystemSnapshot,
   SystemUpdate,
+  UpdateStatus,
+  WeatherSnapshot,
 } from "./types";
 
 export class NativeError extends Error {
@@ -376,4 +379,30 @@ export function getStorageInfo(): Promise<StorageInfo> {
 /** Plain-text diagnostics summary (no user activity, no secrets). */
 export function getDiagnostics(): Promise<string> {
   return call<string>("get_diagnostics");
+}
+
+/* ------------------------------------------------------------------------ */
+/* Weather and updates                                                        */
+/* ------------------------------------------------------------------------ */
+
+/** The forecast for the chosen place (cached 30 min; `force` refreshes). */
+export function getWeather(force = false): Promise<WeatherSnapshot> {
+  return call<WeatherSnapshot>("get_weather", { force });
+}
+
+export function searchWeatherPlaces(query: string): Promise<PlaceResult[]> {
+  return call<PlaceResult[]>("search_weather_places", { query });
+}
+
+export function getUpdateStatus(): Promise<UpdateStatus> {
+  return call<UpdateStatus>("get_update_status");
+}
+
+export function checkForUpdates(): Promise<UpdateStatus> {
+  return call<UpdateStatus>("check_for_updates");
+}
+
+/** Installs the found update and restarts Islandy (resolves only if it couldn't). */
+export function installUpdate(): Promise<UpdateStatus> {
+  return call<UpdateStatus>("install_update");
 }

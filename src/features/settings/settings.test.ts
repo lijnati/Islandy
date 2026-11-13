@@ -56,9 +56,30 @@ describe("settings schema", () => {
       "calendar:true",
       "activity:true",
       "system:false",
+      "weather:false",
     ]);
     expect(n.general.toggleShortcut).toBe("Ctrl+Alt+Space");
     expect(n.island.monitor).toBe("primary");
+  });
+
+  it("validates and rounds the weather place like Rust", () => {
+    const s = clone();
+    s.weather.location = {
+      name: " Addis\u0007Ababa ",
+      detail: "Ethiopia",
+      latitude: 9.02497,
+      longitude: 38.74689,
+    };
+    const n = normalizeSettings(s);
+    expect(n.weather.location).toEqual({
+      name: "AddisAbaba",
+      detail: "Ethiopia",
+      latitude: 9.02,
+      longitude: 38.75,
+    });
+    expect(normalizeSettings(n)).toEqual(n);
+    s.weather.location = { name: "X", detail: "", latitude: 91, longitude: 0 };
+    expect(normalizeSettings(s).weather.location).toBeNull();
   });
 
   it("moves widgets within bounds", () => {
@@ -69,8 +90,9 @@ describe("settings schema", () => {
       "calendar",
       "system",
       "audio",
+      "weather",
     ]);
-    expect(moveWidget(items, 4, 99).map((w) => w.id)).toEqual(items.map((w) => w.id));
+    expect(moveWidget(items, 5, 99).map((w) => w.id)).toEqual(items.map((w) => w.id));
     expect(moveWidget(items, -1, 0)).toEqual(items);
   });
 });

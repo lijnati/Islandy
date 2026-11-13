@@ -8,6 +8,7 @@ import type {
   DashboardWidgetId,
   Settings,
   SettingsPageId,
+  WeatherLocation,
   WidgetEntry,
 } from "../../services/types";
 import { DEFAULT_SETTINGS, DEFAULT_SHORTCUT } from "./defaults";
@@ -27,6 +28,7 @@ export const WIDGET_IDS: readonly DashboardWidgetId[] = [
   "activity",
   "system",
   "audio",
+  "weather",
 ];
 
 export const SETTINGS_PAGES: readonly { id: SettingsPageId; label: string }[] = [
@@ -67,6 +69,35 @@ const validMonitor = (name: string) =>
   name.length <= 128 &&
   !Array.from({ length: name.length }, (_, i) => name.charCodeAt(i)).some((code) => code < 32);
 
+const round2 = (v: number) => Math.round(v * 100) / 100;
+const placeText = (text: string) =>
+  Array.from(text)
+    .filter((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127)
+    .slice(0, 80)
+    .join("")
+    .trim();
+
+/** Mirrors `WeatherLocation::sanitized`. */
+export function normalizeLocation(location: WeatherLocation | null): WeatherLocation | null {
+  if (!location) return null;
+  const name = placeText(location.name);
+  const { latitude, longitude } = location;
+  const valid =
+    name.length > 0 &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    Math.abs(latitude) <= 90 &&
+    Math.abs(longitude) <= 180;
+  return valid
+    ? {
+        name,
+        detail: placeText(location.detail),
+        latitude: round2(latitude),
+        longitude: round2(longitude),
+      }
+    : null;
+}
+
 /** Mirrors `Settings::normalize` (idempotent). */
 export function normalizeSettings(s: Settings): Settings {
   const d = DEFAULT_SETTINGS;
@@ -105,6 +136,8 @@ export function normalizeSettings(s: Settings): Settings {
     },
     interaction,
     widgets: { items: normalizeWidgets(s.widgets.items) },
+    weather: { ...s.weather, location: normalizeLocation(s.weather.location) },
+    updates: { ...s.updates },
   };
 }
 

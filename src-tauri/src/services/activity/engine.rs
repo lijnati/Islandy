@@ -908,6 +908,25 @@ impl ActivityEngine {
                 10 * SECOND,
                 None,
             ),
+            SystemAlert::UpdateAvailable { version, automatic } => (
+                draft(
+                    EventKind::UpdateAvailable,
+                    if *automatic {
+                        "Update ready"
+                    } else {
+                        "Update available"
+                    },
+                    Severity::Info,
+                )
+                .describe(Some(if *automatic {
+                    format!("Islandy {version} installs while you're away")
+                } else {
+                    format!("Islandy {version} · Restart to update from the tray")
+                })),
+                format!("system:update:{version}"),
+                24 * 60 * MINUTE,
+                None,
+            ),
         };
         if self.duplicate(&key, window, now) {
             return Outcome::default();

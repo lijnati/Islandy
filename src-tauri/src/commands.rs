@@ -39,6 +39,8 @@ use crate::{
             settings::{self as system_settings, SettingsPage},
             SystemRequest, SystemService,
         },
+        updates::{UpdateService, UpdateStatus},
+        weather::{PlaceResult, WeatherService, WeatherSnapshot},
     },
     settings_window::{self, SettingsPage as WindowPage},
     shortcut::{self, ShortcutManager, ShortcutStatus},
@@ -756,4 +758,60 @@ pub async fn get_diagnostics<R: Runtime>(app: AppHandle<R>) -> String {
         problems: log::recent_problems(),
     };
     diagnostics::format_report(&report)
+}
+
+/* ------------------------------------------------------------------------ */
+/* Weather and updates                                                       */
+/* ------------------------------------------------------------------------ */
+
+/// The weather widget's forecast for the place chosen in Settings (cached
+/// for 30 minutes; `force` asks for a fresh one). No place: no request.
+#[tauri::command]
+pub async fn get_weather(
+    settings: State<'_, SettingsService>,
+    weather: State<'_, WeatherService>,
+    force: Option<bool>,
+) -> Result<WeatherSnapshot> {
+    let prefs = settings.get().weather;
+    Ok(weather
+        .snapshot(prefs.location, prefs.unit, force.unwrap_or(false))
+        .await)
+}
+
+/// Place search for Settings › Widgets › Weather (2–80 characters).
+#[tauri::command]
+pub async fn search_weather_places(
+    weather: State<'_, WeatherService>,
+    query: String,
+) -> Result<Vec<PlaceResult>> {
+    weather.search(&query).await
+}
+
+#[tauri::command]
+pub fn get_update_status(updates: State<'_, UpdateService>) -> UpdateStatus {
+    updates.status()
+}
+
+/// "Check for updates" (Settings › About, tray). Downloads a found update
+/// right away when automatic installation is on.
+#[tauri::command]
+pub async fn check_for_updates<R: Runtime>(
+    app: AppHandle<R>,
+    updates: State<'_, UpdateService>,
+    settings: State<'_, SettingsService>,
+) -> Result<UpdateStatus> {
+    let download = settings.get().updates.auto_install;
+    let status = updates.check(&app, download).await;
+    tray::sync_update(&app);
+    Ok(status)
+}
+
+/// "Restart to update": installs the found update and restarts Islandy.
+/// Returns only if there was nothing to install or installing failed.
+#[tauri::command]
+pub async fn install_update<R: Runtime>(
+    app: AppHandle<R>,
+    updates: State<'_, UpdateService>,
+) -> Result<UpdateStatus> {
+    Ok(updates.install(&app).await)
 }

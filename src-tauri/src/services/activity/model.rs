@@ -104,6 +104,7 @@ pub enum EventKind {
     NetworkLost,
     NetworkRestored,
     AudioOutputChanged,
+    UpdateAvailable,
 }
 
 /// One activity record.

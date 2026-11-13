@@ -1,2 +1,0 @@
-de93627674b8d66d71ea6c3c52350f4d99bc78f85e7d86b63855f403a3a048a0  Islandy_0.1.0_x64-setup.exe
-ceb0bf24af53e63a97e04800db8ed6da5cbf83bffc4a26da549fa1f978c3070e  islandy.exe

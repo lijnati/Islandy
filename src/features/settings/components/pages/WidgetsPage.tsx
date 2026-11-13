@@ -9,6 +9,7 @@ import { moveWidget } from "../../settings-schema";
 import { useSettings, useSettingsStore } from "../../settings-store";
 import { fitWidgets, WIDGETS } from "../../../widgets/registry";
 import { Button, PageHeader, Section } from "../controls";
+import { WeatherSettings } from "../WeatherSettings";
 
 export function WidgetsPage() {
   const items = useSettings((s) => s.widgets.items);
@@ -101,6 +102,7 @@ export function WidgetsPage() {
           })}
         </ol>
       </Section>
+      <WeatherSettings />
     </div>
   );
 }

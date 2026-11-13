@@ -352,6 +352,13 @@ pub enum SystemAlert {
     AudioOutputChanged {
         name: String,
     },
+    /// A newer Islandy was found (from `services::updates`, not a system
+    /// monitor). `automatic`: it is downloaded and installs while away.
+    #[serde(rename_all = "camelCase")]
+    UpdateAvailable {
+        version: String,
+        automatic: bool,
+    },
 }
 
 /// Everything at once: returned by `connect_system`.

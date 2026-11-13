@@ -229,6 +229,19 @@ pub fn fullscreen_on(monitor: PhysicalRect, own: Option<isize>) -> bool {
     }
 }
 
+/// How long the user has not touched the keyboard or mouse (Windows only;
+/// `None` elsewhere). Used to install a downloaded update while away.
+pub fn user_idle_for() -> Option<std::time::Duration> {
+    #[cfg(windows)]
+    {
+        windows_os::user_idle_for()
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
 /// Opens one of Islandy's own folders in the file manager.
 pub fn open_folder(path: &Path) -> Result<()> {
     #[cfg(windows)]

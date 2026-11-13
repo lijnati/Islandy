@@ -225,6 +225,16 @@ export function alertToPeek(alert: SystemAlert): PeekContent {
         tone: "neutral",
         icon: "speaker",
       };
+    case "updateAvailable":
+      return {
+        source: "Islandy",
+        title: alert.automatic ? "Update ready" : "Update available",
+        detail: alert.automatic
+          ? `${alert.version} installs while you're away`
+          : `${alert.version} · Restart to update from the tray`,
+        tone: "neutral",
+        icon: "update",
+      };
   }
 }
 

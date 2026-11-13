@@ -90,6 +90,10 @@ choice!(
     /// Size presets of the collapsed pill (and, proportionally, peeks).
     SizePreset { Standard, Compact, Comfortable }
 );
+choice!(
+    /// Temperature unit of the weather widget.
+    TemperatureUnit { Celsius, Fahrenheit }
+);
 
 /// Dashboard widgets, in the registry's canonical (default) order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -100,15 +104,17 @@ pub enum WidgetId {
     Activity,
     System,
     Audio,
+    Weather,
 }
 
 impl WidgetId {
-    pub const ALL: [WidgetId; 5] = [
+    pub const ALL: [WidgetId; 6] = [
         WidgetId::Media,
         WidgetId::Calendar,
         WidgetId::Activity,
         WidgetId::System,
         WidgetId::Audio,
+        WidgetId::Weather,
     ];
 
     fn enabled_by_default(self) -> bool {
@@ -283,6 +289,83 @@ impl Default for WidgetSettings {
     }
 }
 
+/// A place chosen in Settings › Widgets › Weather (from Open-Meteo's
+/// geocoding search). Coordinates are stored rounded to two decimals
+/// (about 1 km): enough for a forecast, no more precise than needed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherLocation {
+    pub name: String,
+    /// Region and/or country, for display ("Bavaria, Germany").
+    pub detail: String,
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+// Coordinates are always finite and in range (see `normalize`).
+impl Eq for WeatherLocation {}
+
+const MAX_PLACE_TEXT: usize = 80;
+
+impl WeatherLocation {
+    pub fn round(value: f64) -> f64 {
+        (value * 100.0).round() / 100.0
+    }
+
+    /// In range, finite and with displayable names; `None` otherwise.
+    pub fn sanitized(mut self) -> Option<Self> {
+        let clean = |text: &str| -> String {
+            text.chars()
+                .filter(|c| !c.is_control())
+                .take(MAX_PLACE_TEXT)
+                .collect::<String>()
+                .trim()
+                .to_owned()
+        };
+        self.name = clean(&self.name);
+        self.detail = clean(&self.detail);
+        let valid = !self.name.is_empty()
+            && self.latitude.is_finite()
+            && self.longitude.is_finite()
+            && (-90.0..=90.0).contains(&self.latitude)
+            && (-180.0..=180.0).contains(&self.longitude);
+        valid.then(|| {
+            self.latitude = Self::round(self.latitude);
+            self.longitude = Self::round(self.longitude);
+            self
+        })
+    }
+}
+
+/// The weather widget. No location means no request is ever made.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WeatherSettings {
+    pub location: Option<WeatherLocation>,
+    pub unit: TemperatureUnit,
+}
+
+/// Automatic updates (signed releases from the project's GitHub Releases).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct UpdateSettings {
+    /// Look for a new version shortly after start and then every few hours.
+    pub auto_check: bool,
+    /// Download a found update and install it while the PC is idle (the
+    /// island collapsed, no input for a few minutes). Off: Islandy only
+    /// tells you and waits for "Restart to update".
+    pub auto_install: bool,
+}
+
+impl Default for UpdateSettings {
+    fn default() -> Self {
+        Self {
+            auto_check: true,
+            auto_install: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -297,6 +380,10 @@ pub struct Settings {
     pub interaction: InteractionSettings,
     #[serde(deserialize_with = "section")]
     pub widgets: WidgetSettings,
+    #[serde(deserialize_with = "section")]
+    pub weather: WeatherSettings,
+    #[serde(deserialize_with = "section")]
+    pub updates: UpdateSettings,
 }
 
 impl Default for Settings {
@@ -308,6 +395,8 @@ impl Default for Settings {
             island: IslandSettings::default(),
             interaction: InteractionSettings::default(),
             widgets: WidgetSettings::default(),
+            weather: WeatherSettings::default(),
+            updates: UpdateSettings::default(),
         }
     }
 }
@@ -369,6 +458,12 @@ impl Settings {
             }
         }
         self.widgets.items = items;
+
+        self.weather.location = self
+            .weather
+            .location
+            .take()
+            .and_then(WeatherLocation::sanitized);
         self
     }
 }
@@ -472,7 +567,7 @@ mod tests {
     fn widgets_are_deduplicated_and_completed() {
         let v = json!({ "widgets": { "items": [
             { "id": "audio", "enabled": true },
-            { "id": "weather", "enabled": true },
+            { "id": "radar", "enabled": true },
             { "id": "audio", "enabled": false },
             { "id": "media", "enabled": false },
             "garbage",
@@ -487,8 +582,41 @@ mod tests {
                 (WidgetId::Calendar, true),
                 (WidgetId::Activity, true),
                 (WidgetId::System, false),
+                (WidgetId::Weather, false),
             ]
         );
+    }
+
+    #[test]
+    fn weather_locations_are_validated_and_rounded() {
+        let mut s = Settings::default();
+        s.weather.location = Some(WeatherLocation {
+            name: " Addis\u{7}Ababa ".into(),
+            detail: "Ethiopia".into(),
+            latitude: 9.024_97,
+            longitude: 38.746_89,
+        });
+        let s = s.normalize();
+        let loc = s.weather.location.clone().unwrap();
+        assert_eq!(loc.name, "AddisAbaba");
+        assert_eq!((loc.latitude, loc.longitude), (9.02, 38.75));
+        assert_eq!(s.clone().normalize(), s, "idempotent");
+
+        for (lat, lon) in [(91.0, 0.0), (0.0, -181.0), (f64::NAN, 0.0)] {
+            let mut s = Settings::default();
+            s.weather.location = Some(WeatherLocation {
+                name: "X".into(),
+                detail: String::new(),
+                latitude: lat,
+                longitude: lon,
+            });
+            assert_eq!(s.normalize().weather.location, None);
+        }
+        // A malformed stored location falls back to "none", keeping the unit.
+        let v = json!({ "weather": { "location": { "name": 3 }, "unit": "fahrenheit" } });
+        let s = serde_json::from_value::<Settings>(v).unwrap().normalize();
+        assert_eq!(s.weather.location, None);
+        assert_eq!(s.weather.unit, TemperatureUnit::Fahrenheit);
     }
 
     #[test]

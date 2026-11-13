@@ -20,6 +20,7 @@ import { AudioWidget } from "../widgets/AudioWidget";
 import { CalendarDetail, CalendarWidget } from "../widgets/CalendarWidget";
 import { MediaDetail, MediaWidget } from "../widgets/MediaWidget";
 import { SystemWidget } from "../widgets/SystemWidget";
+import { WeatherWidget } from "../widgets/WeatherWidget";
 import { IslandToolbar } from "./IslandToolbar";
 
 const DETAILS: Record<WidgetId, () => React.JSX.Element> = {
@@ -46,6 +47,7 @@ const WIDGET_COMPONENTS: Record<
   activity: ActivityWidget,
   system: SystemWidget,
   audio: AudioWidget,
+  weather: WeatherWidget,
 };
 
 function NoWidgets() {

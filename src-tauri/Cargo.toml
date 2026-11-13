@@ -1,6 +1,6 @@
 [package]
 name = "islandy"
-version = "0.1.0"
+version = "0.2.0"
 description = "A beautiful, context-aware Dynamic Island for Windows."
 authors = ["Islandy contributors"]
 license = "UNLICENSED"
@@ -28,6 +28,12 @@ serde_json = { version = "1", features = ["preserve_order"] }
 # The per-installation receiver token (OS CSPRNG); already a Tauri dependency.
 getrandom = "0.3"
 tauri-plugin-single-instance = "2"
+# Signed updates from GitHub Releases (minisign signature checked before install).
+tauri-plugin-updater = "2"
+# HTTPS for the weather widget (Open-Meteo). Same reqwest/rustls the updater
+# already brings in; `ring` is installed as the process' crypto provider.
+reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
@@ -53,6 +59,7 @@ windows = { version = "0.62", features = [
   "Win32_System_Threading",
   "Win32_System_Variant",
   "Win32_System_Wmi",
+  "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_Shell",
   "Win32_UI_Shell_PropertiesSystem",
   "Win32_UI_WindowsAndMessaging",

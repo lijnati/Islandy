@@ -29,4 +29,8 @@ export {
   setLaunchAtLogin,
   setToggleShortcut,
   updateSettings,
+  searchWeatherPlaces,
+  getUpdateStatus,
+  checkForUpdates,
+  installUpdate,
 } from "../../services/native";

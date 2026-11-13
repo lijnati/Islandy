@@ -31,7 +31,8 @@ export type NativeErrorKind =
   | "rejected"
   | "timeout"
   | "denied"
-  | "shortcut";
+  | "shortcut"
+  | "network";
 
 export interface NativeErrorPayload {
   kind: NativeErrorKind;
@@ -264,7 +265,8 @@ export type SystemAlert =
   | { type: "powerDisconnected"; percent: number | null }
   | { type: "networkLost" }
   | { type: "networkRestored"; kind: ConnectionKind; name: string | null }
-  | { type: "audioOutputChanged"; name: string };
+  | { type: "audioOutputChanged"; name: string }
+  | { type: "updateAvailable"; version: string; automatic: boolean };
 
 export interface SystemSnapshot {
   revision: number;
@@ -323,7 +325,8 @@ export type ActivityKind =
   | "powerDisconnected"
   | "networkLost"
   | "networkRestored"
-  | "audioOutputChanged";
+  | "audioOutputChanged"
+  | "updateAvailable";
 
 export interface ActivityEvent {
   /** Stable, unique, increasing (`a<hex>`). */
@@ -454,7 +457,8 @@ export type AnimationLevel = "full" | "subtle";
 export type ReducedMotionSetting = "system" | "on" | "off";
 export type Anchor = "topCenter" | "topLeft" | "topRight";
 export type SizePreset = "standard" | "compact" | "comfortable";
-export type DashboardWidgetId = "media" | "calendar" | "activity" | "system" | "audio";
+export type DashboardWidgetId = "media" | "calendar" | "activity" | "system" | "audio" | "weather";
+export type TemperatureUnit = "celsius" | "fahrenheit";
 
 export interface GeneralSettings {
   toggleShortcut: string;
@@ -501,6 +505,26 @@ export interface WidgetEntry {
   enabled: boolean;
 }
 
+/** A place for the weather widget. Mirrors `models::WeatherLocation`. */
+export interface WeatherLocation {
+  name: string;
+  /** Region and/or country ("Illinois, United States"). */
+  detail: string;
+  /** Rounded to two decimals. */
+  latitude: number;
+  longitude: number;
+}
+
+export interface WeatherSettings {
+  location: WeatherLocation | null;
+  unit: TemperatureUnit;
+}
+
+export interface UpdateSettings {
+  autoCheck: boolean;
+  autoInstall: boolean;
+}
+
 export interface Settings {
   version: number;
   general: GeneralSettings;
@@ -508,6 +532,66 @@ export interface Settings {
   island: IslandSettings;
   interaction: InteractionSettings;
   widgets: { items: WidgetEntry[] };
+  weather: WeatherSettings;
+  updates: UpdateSettings;
+}
+
+/* Weather (mirrors `services/weather.rs`) */
+
+export interface CurrentWeather {
+  temperature: number;
+  feelsLike: number;
+  /** WMO weather code. */
+  code: number;
+  isDay: boolean;
+  humidity: number | null;
+  /** km/h (Celsius) or mph (Fahrenheit). */
+  windSpeed: number | null;
+}
+
+export interface DailyWeather {
+  /** `YYYY-MM-DD`, local to the place. */
+  date: string;
+  code: number;
+  high: number;
+  low: number;
+}
+
+export type WeatherSnapshot =
+  | { status: "unconfigured" }
+  | { status: "loading"; location: WeatherLocation }
+  | { status: "error"; location: WeatherLocation; message: string }
+  | {
+      status: "ready";
+      location: WeatherLocation;
+      unit: TemperatureUnit;
+      forecast: { current: CurrentWeather; days: DailyWeather[] };
+      updatedAtMs: number;
+      stale: boolean;
+    };
+
+export type PlaceResult = WeatherLocation;
+
+/* Updates (mirrors `services/updates.rs`) */
+
+export type UpdatePhase =
+  | "idle"
+  | "checking"
+  | "upToDate"
+  | "available"
+  | "downloading"
+  | "ready"
+  | "installing"
+  | "failed";
+
+export interface UpdateStatus {
+  phase: UpdatePhase;
+  currentVersion: string;
+  version: string | null;
+  notes: string | null;
+  progress: number | null;
+  lastCheckedMs: number | null;
+  error: string | null;
 }
 
 export type SettingsLoadStatus =

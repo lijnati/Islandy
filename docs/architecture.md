@@ -223,6 +223,21 @@ island window (index.html) ──────┤ connect_settings│   interacti
 - **Widgets** (`src/features/widgets/registry.ts`): id, name, min width, layout; the dashboard
   shows enabled widgets in order while they fit.
 
+## Weather and updates (0.2.0)
+
+- **Weather** (`services/weather.rs`): `get_weather` returns a cached forecast (30 min) for the
+  place in `settings.weather`; a stale or missing one is fetched from Open-Meteo with reqwest
+  (rustls/ring) on demand, only while the island's weather widget is mounted. Failures back off
+  for 5 minutes and keep showing the last forecast as stale. `search_weather_places` (settings
+  window only) calls the geocoding API. Nothing is persisted except the chosen place.
+- **Updates** (`services/updates.rs`, `tauri-plugin-updater`): a background thread checks the
+  GitHub `latest.json` 45 s after start and every 6 h (if enabled), downloads and verifies a
+  found update into memory, and installs it once Windows reports 4 minutes without input (or on
+  `install_update`, the tray entry, or Settings › About). Before installing it runs the normal
+  `shutdown` (history flushed, services stopped); the NSIS installer then runs with `/UPDATE` in
+  passive mode and restarts Islandy. The status is polled by the settings window
+  (`get_update_status`) and mirrored by the tray entry.
+
 ## Focus and keyboard
 
 - By default the window is non-activating (`WS_EX_NOACTIVATE`): hovering and clicking

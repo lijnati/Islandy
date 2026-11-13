@@ -81,7 +81,10 @@ export function PrivacyPage() {
 
   return (
     <div className="flex flex-col gap-7">
-      <PageHeader title="Privacy" description="Islandy works entirely on this PC." />
+      <PageHeader
+        title="Privacy"
+        description="Islandy works on this PC. It goes online only to check for updates and, if you choose a place, to load the weather."
+      />
 
       <section
         aria-label="What Islandy collects"
@@ -89,7 +92,9 @@ export function PrivacyPage() {
       >
         <ul className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-caption text-fg-muted">
           <li>• No account, no cloud, no telemetry or analytics.</li>
-          <li>• Nothing is uploaded; there are no network calls of its own.</li>
+          <li>
+            • Nothing about you is uploaded. Online: update checks (GitHub), weather (Open-Meteo).
+          </li>
           <li>• Never collects prompts, responses or tool output.</li>
           <li>• Never reads source code, terminal history or environment variables.</li>
           <li>• Activity history: event names, project folder names, times.</li>

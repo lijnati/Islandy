@@ -22,6 +22,8 @@ use crate::{
         settings::{storage::LoadStatus, Settings, SettingsService},
         startup,
         system::SystemService,
+        updates::UpdateService,
+        weather::WeatherService,
     },
     settings_window::{self, SettingsPage},
     shortcut,
@@ -50,6 +52,9 @@ struct WatcherStop(Arc<AtomicBool>);
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
     let at_login = startup::launched_at_login(&args);
+    // HTTPS (weather, updates) uses rustls with `ring`; install it once for
+    // the process (the updater would otherwise only do so during a check).
+    let _ = rustls::crypto::ring::default_provider().install_default();
 
     let data_dir = paths::data_dir();
     let settings = SettingsService::load();
@@ -77,6 +82,9 @@ pub fn run() {
             settings_window::open_detached(app, SettingsPage::General);
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(WeatherService::default())
+        .manage(UpdateService::default())
         .manage(WindowState::new(
             PlacementConfig::from_settings(&initial.island),
             start_hidden,
@@ -132,6 +140,11 @@ pub fn run() {
             commands::open_islandy_folder,
             commands::get_storage_info,
             commands::get_diagnostics,
+            commands::get_weather,
+            commands::search_weather_places,
+            commands::get_update_status,
+            commands::check_for_updates,
+            commands::install_update,
         ])
         .setup(move |app| {
             // Media runs on its own worker thread; starting it never blocks.
@@ -155,6 +168,7 @@ pub fn run() {
             island.show()?;
             let stop = Arc::new(AtomicBool::new(false));
             spawn_watcher(app.handle().clone(), stop.clone());
+            UpdateService::spawn_loop(app.handle().clone(), stop.clone());
             app.manage(WatcherStop(stop));
             Ok(())
         })
@@ -198,9 +212,14 @@ pub fn run() {
     });
 }
 
-/// Stops every background service in order (bounded waits). Runs once, when
-/// the event loop exits (Quit from the tray, or Windows shutting down).
-fn shutdown<R: Runtime>(app: &AppHandle<R>) {
+/// Stops every background service in order (bounded waits). Runs once:
+/// when the event loop exits (Quit from the tray, or Windows shutting down),
+/// or before an update is installed.
+pub fn shutdown<R: Runtime>(app: &AppHandle<R>) {
+    static DONE: AtomicBool = AtomicBool::new(false);
+    if DONE.swap(true, Ordering::AcqRel) {
+        return;
+    }
     crate::log_info!("app", "shutting down");
     if let Some(stop) = app.try_state::<WatcherStop>() {
         stop.0.store(true, Ordering::Relaxed);

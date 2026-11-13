@@ -2,6 +2,7 @@ import {
   Asterisk,
   Battery,
   BatteryLow,
+  Download,
   FlaskConical,
   Hammer,
   MessageSquare,
@@ -31,4 +32,5 @@ export const ACTIVITY_ICONS: Record<PeekIcon, LucideIcon> = {
   tests: FlaskConical,
   server: Server,
   message: MessageSquare,
+  update: Download,
 };

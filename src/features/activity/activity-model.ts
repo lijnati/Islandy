@@ -241,6 +241,8 @@ export function eventIcon(kind: ActivityKind): PeekIcon {
       return "wifi";
     case "audioOutputChanged":
       return "speaker";
+    case "updateAvailable":
+      return "update";
   }
 }
 
@@ -262,6 +264,8 @@ function sourceTitle(e: ActivityEvent): string {
         return "Power";
       case "audioOutputChanged":
         return "Sound";
+      case "updateAvailable":
+        return "Islandy";
       default:
         return "Network";
     }

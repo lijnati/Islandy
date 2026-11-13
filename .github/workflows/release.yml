@@ -1,14 +1,23 @@
 name: Release
 
-# Builds the Windows NSIS installer with MSVC and publishes it to a GitHub Release.
-# Triggered by pushing a `v*` tag (e.g. v0.1.0-rc.1), or manually for an existing tag.
+# Builds the Windows NSIS installer with MSVC, signs the update artifacts and publishes
+# them to a GitHub Release together with `latest.json` (what installed copies of Islandy
+# check for automatic updates).
+#
+# Triggered by pushing a `v*` tag (e.g. v0.2.0), or manually from the Actions tab: enter a
+# tag; if it doesn't exist yet it is created on the selected branch's commit.
+#
+# Required repository secrets (Settings › Secrets and variables › Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           the updater private key (contents of the .key file)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password
+# Their public half is `plugins.updater.pubkey` in src-tauri/tauri.conf.json.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build and release (e.g. v0.1.0-rc.1)"
+        description: "Tag to build and release (e.g. v0.2.0); created from the selected branch if missing"
         required: true
 
 permissions:
@@ -26,7 +35,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - name: Use the tag if it exists
+        id: ref
+        shell: bash
+        run: |
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            git checkout "refs/tags/${TAG}"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check the version and signing secrets
+        shell: bash
+        env:
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "v${version}" != "${TAG%%-*}" ] && [ "v${version}" != "${TAG}" ]; then
+            echo "::error::Tag ${TAG} doesn't match the app version ${version} (src-tauri/tauri.conf.json)."
+            exit 1
+          fi
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is missing: updates can't be signed. See docs/release.md."
+            exit 1
+          fi
 
       - uses: pnpm/action-setup@v4
 
@@ -67,10 +100,15 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ env.TAG }}
+          commitish: ${{ steps.ref.outputs.sha }}
           releaseName: Islandy ${{ env.TAG }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: ${{ steps.notes.outputs.prerelease }}
+          # Uploads the installer, its .sig and latest.json (the updater manifest).
+          includeUpdaterJson: true
           args: --target x86_64-pc-windows-msvc

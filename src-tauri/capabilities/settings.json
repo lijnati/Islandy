@@ -27,6 +27,10 @@
     "allow-remove-claude-integration",
     "allow-test-local-receiver",
     "allow-get-media-snapshot",
-    "allow-get-system-snapshot"
+    "allow-get-system-snapshot",
+    "allow-search-weather-places",
+    "allow-get-update-status",
+    "allow-check-for-updates",
+    "allow-install-update"
   ]
 }

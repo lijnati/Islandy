@@ -62,6 +62,14 @@ export const WIDGETS: Record<DashboardWidgetId, WidgetDefinition> = {
     layout: { kind: "fixed" },
     native: true,
   },
+  weather: {
+    id: "weather",
+    name: "Weather",
+    description: "Current conditions and a short forecast for a place you choose.",
+    minWidth: 220,
+    layout: { kind: "fixed" },
+    native: true,
+  },
 };
 
 /** Gap between widgets and the dashboard's horizontal padding (px). */
